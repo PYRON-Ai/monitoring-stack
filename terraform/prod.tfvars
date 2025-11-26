@@ -1,0 +1,7 @@
+environment         = "production"
+droplet_name        = "pyron-monitor-stack-production"
+droplet_size        = "s-2vcpu-4gb"
+spaces_bucket_name  = "pyron-monitor-stack-production"
+spaces_region       = "fra1"
+spaces_endpoint     = "https://fra1.digitaloceanspaces.com"
+

@@ -1,0 +1,45 @@
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  log_level: info
+
+ingester:
+  lifecycler:
+    address: 127.0.0.1
+    ring:
+      kvstore:
+        store: inmemory
+  chunk_idle_period: 5m
+  chunk_retain_period: 30s
+
+schema_config:
+  configs:
+    - from: 2020-10-15
+      store: boltdb-shipper
+      object_store: s3
+      schema: v11
+      index:
+        prefix: index_
+        period: 24h
+
+storage_config:
+  boltdb_shipper:
+    active_index_directory: /loki/index
+    cache_location: /loki/cache
+    shared_store: s3
+  aws:
+    s3: s3://$SPACES_KEY:$SPACES_SECRET@${SPACES_BUCKET}/${SPACES_PREFIX:-loki}
+    s3forcepathstyle: true
+    region: ${SPACES_REGION}
+    endpoint: ${SPACES_ENDPOINT}
+    http_config:
+      idle_conn_timeout: 90s
+limits_config:
+  enforce_metric_name: false
+chunk_store_config:
+  max_look_back_period: 168h
+
+table_manager:
+  retention_deletes_enabled: true
+  retention_period: 720h
