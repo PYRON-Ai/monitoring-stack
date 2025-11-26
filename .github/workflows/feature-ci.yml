@@ -45,14 +45,15 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
       - uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          base: ${{ github.ref_name }}
-          branch: base
+          base: stage
+          branch: ${{ github.ref_name }}
           title: "[Auto] Merge ${{ github.ref_name }} into stage"
           body: "Auto-created PR after successful CI checks."
           draft: false
           commit-message: "[create-pull-request] automated change"
           delete-branch: false
-
