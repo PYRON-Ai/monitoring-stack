@@ -81,8 +81,8 @@ jobs:
           EOF
 
   create-pr:
-    name: Create PR to stage
-    needs: ci-check
+    name: Create PR to main
+    needs: deploy
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
