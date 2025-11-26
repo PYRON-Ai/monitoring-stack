@@ -48,7 +48,7 @@ jobs:
           script: |
             const base = 'stage';
             const head = process.env.HEAD_BRANCH;
-            const { owner, repo } = github.context.repo;
+            const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
             try {
               await github.rest.repos.getBranch({ owner, repo, branch: base });
             } catch (error) {
