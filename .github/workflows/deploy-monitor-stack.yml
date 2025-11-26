@@ -51,22 +51,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up GitHub CLI
-        uses: cli/cli@v2
-
-      - name: Ensure PR exists
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if gh pr view --json number > /dev/null 2>&1; then
-            echo "PR already exists"
-            exit 0
-          fi
-          gh pr create \
-            --base stage \
-            --head "${GITHUB_REF#refs/heads/}" \
-            --title "[Auto] Merge ${GITHUB_REF#refs/heads/} into stage" \
-            --body "Auto-created PR after successful CI checks."
+      - name: Ensure PR exists via REST
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const base = 'stage';
+            const head = github.context.ref.replace('refs/heads/', '');
+            const { owner, repo } = github.context.repo;
+            const openPrs = await github.rest.pulls.list({
+              owner,
+              repo,
+              base,
+              state: 'open',
+              head: `${owner}:${head}`,
+            });
+            if (openPrs.data.length > 0) {
+              console.log('PR already exists');
+              return;
+            }
+            await github.rest.pulls.create({
+              owner,
+              repo,
+              title: `[Auto] Merge ${head} into stage`,
+              head,
+              base,
+              body: 'Auto-created PR after successful CI checks.',
+            });
 
   infra-staging:
     name: Provision staging infrastructure
