@@ -149,7 +149,7 @@ jobs:
 ${{ env.MONITOR_ENV }}
 EOT
           chmod 600 "${{ env.DEPLOY_PATH }}/.env"
-          EOF
+EOF
 
       - name: Deploy monitor stack to staging
         run: |
@@ -190,7 +190,7 @@ EOT
 ${{ env.MONITOR_ENV }}
 EOT
           chmod 600 "${{ env.DEPLOY_PATH }}/.env"
-          EOF
+EOF
 
       - name: Deploy monitor stack to production
         run: |
