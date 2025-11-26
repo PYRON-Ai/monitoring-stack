@@ -27,6 +27,11 @@ variable "ssh_key_fingerprint" {
   type        = string
 }
 
+variable "ssh_key_name" {
+  description = "Name of the SSH key configured in DigitalOcean."
+  type        = string
+}
+
 variable "environment" {
   description = "Environment label appended to resource names (e.g., staging, production)."
   type        = string
@@ -49,5 +54,11 @@ variable "spaces_endpoint" {
   description = "Endpoint used to reach Spaces (e.g., https://fra1.digitaloceanspaces.com)."
   type        = string
   default     = "https://fra1.digitaloceanspaces.com"
+}
+
+variable "spaces_region" {
+  description = "Region where the Spaces bucket lives (used by tfvars but also for sanity)."
+  type        = string
+  default     = "fra1"
 }
 

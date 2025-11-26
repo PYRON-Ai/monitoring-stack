@@ -1,9 +1,9 @@
 data "digitalocean_ssh_key" "deploy" {
-  fingerprint = var.ssh_key_fingerprint
+  name = var.ssh_key_name
 }
 
 locals {
-  normalized_env = lower(trim(var.environment))
+  normalized_env = lower(trimspace(var.environment))
   droplet_full_name = "${var.droplet_name}-${local.normalized_env}"
   bucket_full_name  = "${var.spaces_bucket_name}-${local.normalized_env}"
 }
@@ -47,7 +47,7 @@ EOF
 }
 
 resource "digitalocean_firewall" "monitoring" {
-  name        = "${var.droplet_name}-fw"
+  name        = "${var.droplet_name}-${local.normalized_env}-fw"
   droplet_ids = [digitalocean_droplet.monitor.id]
 
   inbound_rule {
@@ -107,7 +107,7 @@ resource "digitalocean_firewall" "monitoring" {
 
 resource "digitalocean_spaces_bucket" "loki" {
   name   = local.bucket_full_name
-  region = var.do_region
+  region = var.spaces_region
   acl    = var.spaces_acl
 }
 
