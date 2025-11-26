@@ -47,15 +47,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: peter-evans/create-pull-request@v5
+      - uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           base: stage
-          head: ${{ github.ref }}
+          branch: ${{ github.ref }}      # ← AGORA É SUPORTADO
           title: "[Auto] Merge ${{ github.ref_name }} into stage"
           body: "Auto-created PR after successful CI checks."
           draft: false
           delete-branch: false
+
 
 
 #######
