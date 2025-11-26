@@ -3,7 +3,7 @@ data "digitalocean_ssh_key" "deploy" {
 }
 
 locals {
-  normalized_env = lower(trimspace(var.environment))
+  normalized_env    = lower(trimspace(var.environment))
   droplet_full_name = "${var.droplet_name}-${local.normalized_env}"
   bucket_full_name  = "${var.spaces_bucket_name}-${local.normalized_env}"
 }
@@ -93,14 +93,14 @@ resource "digitalocean_firewall" "monitoring" {
   }
 
   outbound_rule {
-    protocol         = "tcp"
-    port_range       = "all"
+    protocol              = "tcp"
+    port_range            = "all"
     destination_addresses = ["0.0.0.0/0", "::/0"]
   }
 
   outbound_rule {
-    protocol         = "udp"
-    port_range       = "all"
+    protocol              = "udp"
+    port_range            = "all"
     destination_addresses = ["0.0.0.0/0", "::/0"]
   }
 }
