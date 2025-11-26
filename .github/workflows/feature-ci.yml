@@ -48,8 +48,8 @@ jobs:
       - uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          base: stage
-          branch: ${{ github.ref_name }}
+          base: ${{ github.ref_name }}
+          branch: base
           title: "[Auto] Merge ${{ github.ref_name }} into stage"
           body: "Auto-created PR after successful CI checks."
           draft: false
