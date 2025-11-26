@@ -56,7 +56,11 @@ jobs:
         with:
           script: |
             const base = 'stage';
-            const head = github.context.ref.replace('refs/heads/', '');
+            const ref = github.context.ref ?? github.context.payload.pull_request?.head.ref;
+            if (!ref) {
+              throw new Error('cannot determine head ref');
+            }
+            const head = ref.replace('refs/heads/', '');
             const { owner, repo } = github.context.repo;
             const openPrs = await github.rest.pulls.list({
               owner,
