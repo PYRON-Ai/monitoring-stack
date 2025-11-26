@@ -65,7 +65,7 @@ jobs:
 
       - name: Terraform apply
         working-directory: terraform
-        run: terraform apply -var-file=terraform/stage.tfvars -auto-approve -input=false
+        run: terraform apply -var-file=stage.tfvars -auto-approve -input=false
 
       - name: Capture Terraform outputs
         id: tf_outputs
@@ -104,7 +104,7 @@ jobs:
 
       - name: Terraform apply
         working-directory: terraform
-        run: terraform apply -var-file=terraform/prod.tfvars -auto-approve -input=false
+        run: terraform apply -var-file=prod.tfvars -auto-approve -input=false
 
       - name: Capture Terraform outputs
         id: tf_outputs
