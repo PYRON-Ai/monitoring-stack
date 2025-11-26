@@ -81,17 +81,20 @@ jobs:
           EOF
 
   create-pr:
-    needs: deploy
+    name: Create PR to stage
+    needs: ci-check
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Create PR to main
-        uses: peter-evans/create-pull-request@v5
+
+      - uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: stage
           base: main
-          title: "[Auto] Promote stage to main"
-          body: "Stage deploy completed successfully."
+          branch: ${{ github.ref }}      # ← AGORA É SUPORTADO
+          title: "[Auto] Merge ${{ github.ref_name }} into main"
+          body: "Auto-created PR after successful CI checks."
           draft: false
+          delete-branch: false
 
