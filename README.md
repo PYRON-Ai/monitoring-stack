@@ -63,19 +63,19 @@ Terraform runs as the first job (`infra-staging` / `infra-production`) in the Gi
 
 ## GitHub Actions deployment
 
-The workflow now runs five jobs across the branches:
+The automation runs as three coordinated workflows:
 
-1. `ci-check`: executes on pushes to `feature/**` and on pull requests targeting `stage`. It validates `docker compose` and checks `terraform fmt`.
-2. `infra-staging` / `infra-production`: trigger on pushes to `stage` and `main`, respectively. Each job sets up Terraform, selects the proper workspace, and runs `terraform apply -var-file=terraform/<env>.tfvars -auto-approve` (where `<env>` is `stage`/`prod`), then exports the droplet IP for the deploy job.
-3. `deploy-staging` / `deploy-production`: wait on the matching Terraform job, rsync the repo (excluding `.git` and `.env`), optionally rewrite the environment file, and run `docker compose pull && docker compose up -d --remove-orphans`.
+1. `feature-ci.yml`: triggers on `feature/**` pushes (and PRs to `stage`) and validates `docker compose config` plus `terraform fmt`, then automatically opens a PR against `stage` using `peter-evans/create-pull-request`.
+2. `stage-deploy.yml`: reacts to `stage` pushes, provisions staging infrastructure via Terraform, deploys the stack, and if successful, opens a PR from `stage` to `main`.
+3. `prod-deploy.yml`: handles `main` pushes by provisioning and deploying the production stack.
 
 ### Required GitHub secrets
-- `DO_TOKEN_STAGING` / `DO_TOKEN_PRODUCTION`: DigitalOcean API tokens with rights to manage droplets, firewalls, and Spaces.
-- `DO_SSH_FINGERPRINT_STAGING` / `DO_SSH_FINGERPRINT_PRODUCTION`: fingerprints of the SSH keys registered in DigitalOcean.
-- `DO_DEPLOY_SSH_KEY`: SSH private key that can log into both droplets.
-- `DO_DEPLOY_USER_STAGING` / `DO_DEPLOY_USER_PRODUCTION`: remote users for each environment (e.g., `root` or `monitor`).
-- `DO_DEPLOY_PATH_STAGING` / `DO_DEPLOY_PATH_PRODUCTION`: target deployment paths (typically `/opt/pyron-monitor-stack` or `/opt/pyron-monitor-stack-staging`).
-- `MONITOR_ENV_STAGING` / `MONITOR_ENV_PRODUCTION`: the `.env` payloads for each environment; the jobs skip pushing the file if the secret is empty.
+- `DO_TOKEN_STAGING` / `DO_TOKEN_PRODUCTION`: DigitalOcean API tokens capable of managing droplets, firewalls, and Spaces.
+- `DO_SSH_FINGERPRINT_STAGING` / `DO_SSH_FINGERPRINT_PRODUCTION`: fingerprints of the SSH keys already registered in DigitalOcean.
+- `DO_DEPLOY_SSH_KEY`: SSH private key that can SSH into all droplets.
+- `DO_DEPLOY_USER_STAGING` / `DO_DEPLOY_USER_PRODUCTION`: remote users on each droplet.
+- `DO_DEPLOY_PATH_STAGING` / `DO_DEPLOY_PATH_PRODUCTION`: deployment directories (e.g., `/opt/pyron-monitor-stack-stage` and `/opt/pyron-monitor-stack`).
+- `MONITOR_ENV_STAGING` / `MONITOR_ENV_PRODUCTION`: `.env` payloads for each environment; the jobs skip writing the file if the secret is empty.
 
 ## Verification and maintenance
 
