@@ -51,12 +51,12 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           base: stage
-          branch: ${{ github.ref_name }}
+          head: ${{ github.ref }}
           title: "[Auto] Merge ${{ github.ref_name }} into stage"
           body: "Auto-created PR after successful CI checks."
           draft: false
-          commit-message: "[create-pull-request] automated change"
           delete-branch: false
+
 
 
 ###
