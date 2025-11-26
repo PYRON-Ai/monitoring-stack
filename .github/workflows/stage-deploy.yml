@@ -82,7 +82,7 @@ jobs:
 
   create-pr:
     name: Create PR to stage
-    needs: ci-check
+    needs: deploy
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
