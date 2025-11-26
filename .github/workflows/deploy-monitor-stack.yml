@@ -40,6 +40,34 @@ jobs:
         working-directory: terraform
         run: terraform fmt -check
 
+  create-pr:
+    name: Create PR to stage
+    needs: ci-check
+    runs-on: ubuntu-latest
+    if: >
+      github.event_name == 'push'
+      && startsWith(github.ref, 'refs/heads/feature/')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up GitHub CLI
+        uses: cli/cli@v3
+
+      - name: Ensure PR exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh pr view --json number > /dev/null 2>&1; then
+            echo "PR already exists"
+            exit 0
+          fi
+          gh pr create \
+            --base stage \
+            --head "${GITHUB_REF#refs/heads/}" \
+            --title "[Auto] Merge ${GITHUB_REF#refs/heads/} into stage" \
+            --body "Auto-created PR after successful CI checks."
+
   infra-staging:
     name: Provision staging infrastructure
     runs-on: ubuntu-latest

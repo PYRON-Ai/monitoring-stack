@@ -63,9 +63,10 @@ Terraform runs as the first job (`infra-staging` / `infra-production`) in the Gi
 
 ## GitHub Actions deployment
 
-The workflow now runs five jobs across the branches:
+The workflow now runs six jobs across the branches:
 
 1. `ci-check`: executes on pushes to `feature/**` and on pull requests targeting `stage`. It validates `docker compose` and checks `terraform fmt`.
+2. `create-pr`: when a feature branch push succeeds, it uses the GitHub CLI to open (or reuse) a pull request onto `stage`, so the automation proceeds naturally.
 2. `infra-staging` / `infra-production`: trigger on pushes to `stage` and `main`, respectively. Each job sets up Terraform, selects the proper workspace, and runs `terraform apply -var-file=terraform/<env>.tfvars -auto-approve` (where `<env>` is `stage`/`prod`), then exports the droplet IP for the deploy job.
 3. `deploy-staging` / `deploy-production`: wait on the matching Terraform job, rsync the repo (excluding `.git` and `.env`), optionally rewrite the environment file, and run `docker compose pull && docker compose up -d --remove-orphans`.
 
