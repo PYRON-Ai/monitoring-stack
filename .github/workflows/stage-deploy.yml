@@ -81,7 +81,7 @@ jobs:
           EOF
 
   create-pr:
-    name: Create PR to stage
+    name: Create PR to main
     needs: deploy
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
