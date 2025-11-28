@@ -46,6 +46,15 @@ resource "digitalocean_droplet" "monitor" {
 EOF
 }
 
+resource "digitalocean_project_resources" "attach" {
+  project = var.do_project_id   # ← ID do projeto STAGING
+  resources = [
+    digitalocean_droplet.monitor.urn,
+    digitalocean_spaces_bucket.loki.urn,
+  ]
+}
+
+
 resource "digitalocean_firewall" "monitoring" {
   name        = "${var.droplet_name}-${local.normalized_env}-fw"
   droplet_ids = [digitalocean_droplet.monitor.id]
