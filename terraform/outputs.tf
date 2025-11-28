@@ -8,6 +8,11 @@ output "droplet_ssh" {
   value       = "ssh -i ~/.ssh/id_rsa root@${digitalocean_droplet.monitor.ipv4_address}"
 }
 
+output "ssh_fingerprint" {
+  value = data.digitalocean_ssh_key.deploy.fingerprint
+}
+
+
 output "spaces_bucket" {
   description = "DigitalOcean Spaces bucket for Loki."
   value = {
