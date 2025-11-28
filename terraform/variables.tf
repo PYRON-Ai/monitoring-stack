@@ -62,3 +62,8 @@ variable "spaces_region" {
   default     = "fra1"
 }
 
+variable "do_project_id" {
+  type = string
+}
+
+
