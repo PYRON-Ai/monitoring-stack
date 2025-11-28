@@ -15,7 +15,6 @@ jobs:
     outputs:
       droplet_ip: ${{ steps.tf_outputs.outputs.droplet_ip }}
     env:
-      TF_VAR_environment: staging
       TF_VAR_do_token: ${{ secrets.DO_TOKEN_STAGING }}
       TF_VAR_ssh_key_fingerprint: ${{ secrets.DO_SSH_FINGERPRINT_STAGING }}
     steps:
@@ -30,9 +29,10 @@ jobs:
         working-directory: terraform
         run: terraform init -input=false
 
-      - name: Select staging workspace
-        working-directory: terraform
-        run: terraform workspace select staging || terraform workspace new staging
+      # ❌ REMOVIDO: workspace (não faz sentido com tfvars)
+      # - name: Select staging workspace
+      #   working-directory: terraform
+      #   run: terraform workspace select staging || terraform workspace new staging
 
       - name: Terraform apply
         working-directory: terraform
@@ -92,9 +92,8 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           base: main
-          branch: ${{ github.ref }}      # ← AGORA É SUPORTADO
+          branch: ${{ github.ref }}
           title: "[Auto] Merge ${{ github.ref_name }} into main"
           body: "Auto-created PR after successful CI checks."
           draft: false
           delete-branch: false
-
