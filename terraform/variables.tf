@@ -67,12 +67,12 @@ variable "do_project_id" {
 }
 
 variable "spaces_access_id" {
-  type = string
+  type      = string
   sensitive = true
 }
 
 variable "spaces_secret_key" {
-  type = string
+  type      = string
   sensitive = true
 }
 
