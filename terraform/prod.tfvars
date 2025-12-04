@@ -5,4 +5,5 @@ spaces_bucket_name = "pyron-monitor-stack-production"
 spaces_region      = "fra1"
 spaces_endpoint    = "https://fra1.digitaloceanspaces.com"
 ssh_key_name       = "pyron-stack-prod-key"
-
+do_project_id      = ""
+do_region          = "SGP1"
