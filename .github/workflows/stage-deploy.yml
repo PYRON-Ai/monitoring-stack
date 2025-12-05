@@ -46,7 +46,9 @@ jobs:
         id: tf_outputs
         working-directory: terraform
         run: |
-          echo "droplet_ip=$(terraform output -raw droplet_ip)" >> "$GITHUB_OUTPUT"
+          IP=$(terraform output -raw droplet_ip | tr -d '\n' | tr -d '\r')
+          echo "droplet_ip=$IP" >> "$GITHUB_OUTPUT"
+
 
   deploy:
     needs: infra
