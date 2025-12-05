@@ -114,9 +114,9 @@ resource "digitalocean_firewall" "monitoring" {
   }
 }
 
-resource "digitalocean_spaces_bucket" "loki" {
-  name   = local.bucket_full_name
-  region = var.spaces_region
-  acl    = var.spaces_acl
-}
+#resource "digitalocean_spaces_bucket" "loki" {
+#  name   = local.bucket_full_name
+#  region = var.spaces_region
+#  acl    = var.spaces_acl
+#}
 
