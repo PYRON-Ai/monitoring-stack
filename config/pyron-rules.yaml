@@ -1,0 +1,39 @@
+groups:
+  - name: pyron-alerts
+    rules:
+
+      - alert: HighCPU
+        expr: (avg(rate(node_cpu_seconds_total{mode!="idle"}[2m]))*100) > 85
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU Alta"
+          description: "CPU acima de 85% por 2+ minutos"
+
+      - alert: HighMemory
+        expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.15
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Memória Crítica"
+          description: "Menos de 15% de RAM disponível"
+
+      - alert: DiskAlmostFull
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.10
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disco quase cheio"
+          description: "Raiz abaixo de 10% disponível"
+
+      - alert: NodeDown
+        expr: up{job="node-exporter"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Servidor OFFLINE"
+          description: "Node não responde há +1m"
