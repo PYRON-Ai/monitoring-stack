@@ -13,27 +13,27 @@ output "ssh_fingerprint" {
 }
 
 
-output "spaces_bucket" {
-  description = "DigitalOcean Spaces bucket for Loki."
-  value = {
-    name     = digitalocean_spaces_bucket.loki.name
-    region   = digitalocean_spaces_bucket.loki.region
-    endpoint = var.spaces_endpoint
-  }
-}
+#output "spaces_bucket" {
+#  description = "DigitalOcean Spaces bucket for Loki."
+#  value = {
+#    name     = digitalocean_spaces_bucket.loki.name
+#    region   = digitalocean_spaces_bucket.loki.region
+#    endpoint = var.spaces_endpoint
+#  }
+#}
 
-output "spaces_bucket_name" {
-  description = "Name of the Loki Spaces bucket."
-  value       = digitalocean_spaces_bucket.loki.name
-}
+#output "spaces_bucket_name" {
+#  description = "Name of the Loki Spaces bucket."
+#  value       = digitalocean_spaces_bucket.loki.name
+#}
 
-output "spaces_bucket_region" {
-  description = "Region where the Loki bucket lives."
-  value       = digitalocean_spaces_bucket.loki.region
-}
+#output "spaces_bucket_region" {
+#  description = "Region where the Loki bucket lives."
+#  value       = digitalocean_spaces_bucket.loki.region
+#}
 
-output "spaces_bucket_endpoint" {
-  description = "Endpoint used by Loki storage."
-  value       = var.spaces_endpoint
-}
+#output "spaces_bucket_endpoint" {
+#  description = "Endpoint used by Loki storage."
+#  value       = var.spaces_endpoint
+#}
 
