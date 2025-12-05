@@ -76,4 +76,8 @@ variable "spaces_secret_key" {
   sensitive = true
 }
 
+variable "destroy" {
+  type    = bool
+  default = false
+}
 
