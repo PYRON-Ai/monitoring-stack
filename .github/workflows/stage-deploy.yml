@@ -15,7 +15,14 @@ jobs:
     outputs:
       droplet_ip: ${{ steps.tf_outputs.outputs.droplet_ip }}
     env:
+      # DO API
       TF_VAR_do_token: ${{ secrets.DO_TOKEN_STAGING }}
+
+      # Spaces S3 keys (para provider + backend)
+      SPACES_ACCESS_KEY_ID: ${{ secrets.DO_SPACES_ACCESS_KEY_ID }}
+      SPACES_SECRET_ACCESS_KEY: ${{ secrets.DO_SPACES_SECRET_ACCESS_KEY }}
+
+      # SSH fingerprint
       TF_VAR_ssh_key_fingerprint: ${{ secrets.DO_SSH_FINGERPRINT_STAGING }}
     steps:
       - uses: actions/checkout@v4
@@ -28,11 +35,6 @@ jobs:
       - name: Terraform init
         working-directory: terraform
         run: terraform init -input=false
-
-      # ❌ REMOVIDO: workspace (não faz sentido com tfvars)
-      # - name: Select staging workspace
-      #   working-directory: terraform
-      #   run: terraform workspace select staging || terraform workspace new staging
 
       - name: Terraform apply
         working-directory: terraform
