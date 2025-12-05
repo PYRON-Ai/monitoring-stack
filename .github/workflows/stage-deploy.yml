@@ -54,6 +54,7 @@ jobs:
   deploy:
     needs: infra
     runs-on: ubuntu-latest
+
     env:
       DEPLOY_HOST: ${{ needs.infra.outputs.droplet_ip }}
       DEPLOY_USER: ${{ secrets.DO_DEPLOY_USER_STAGING }}
@@ -63,35 +64,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Prepare SSH agent
+      - name: Load SSH KEY
         uses: webfactory/ssh-agent@v0.7.0
         with:
           ssh-private-key: ${{ secrets.DO_DEPLOY_SSH_KEY }}
 
-      - name: Trust host fingerprint (🔥 item que faltava)
-        run: |
-          ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
+      - name: Add host fingerprint (🔥 obrigatório)
+        run: ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
 
-      - name: Sync stack
+      - name: Test SSH (pra não passar vergonha depois)
+        run: ssh -o BatchMode=yes $DEPLOY_USER@$DEPLOY_HOST "echo 🔥 Conectado com sucesso!"
+
+      - name: Sync stack (idempotente, rápido, cirúrgico)
         run: |
+          set -e
           rsync -avzh --delete --exclude '.git' --exclude '.env' ./ \
-            ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:${{ env.DEPLOY_PATH }}
+            $DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH
 
-      - name: Push env
+      - name: Push environment
         if: env.MONITOR_ENV != ''
         run: |
-          ssh ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} <<'EOF'
-          printf '%s\n' "${{ env.MONITOR_ENV }}" > "${{ env.DEPLOY_PATH }}/.env"
-          chmod 600 "${{ env.DEPLOY_PATH }}/.env"
+          ssh $DEPLOY_USER@$DEPLOY_HOST <<EOF
+          echo "${MONITOR_ENV}" > ${DEPLOY_PATH}/.env
+          chmod 600 ${DEPLOY_PATH}/.env
           EOF
 
-      - name: Deploy stack
+      - name: Deploy + Restart Stack (sem dó)
         run: |
-          ssh ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} <<'EOF'
-          cd ${{ env.DEPLOY_PATH }}
+          ssh $DEPLOY_USER@$DEPLOY_HOST <<EOF
+          cd $DEPLOY_PATH
           docker compose pull
           docker compose up -d --remove-orphans
           EOF
+
+      - name: Show last compose feedback (debug fino)
+        run: ssh $DEPLOY_USER@$DEPLOY_HOST "docker compose ps && docker compose logs --tail=50"
 
   create-pr:
     name: Create PR to main
