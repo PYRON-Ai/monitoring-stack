@@ -54,6 +54,15 @@ services:
       - '--path.sysfs=/host/sys'
       - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($|/)'
 
+  digitalocean-exporter:
+    image: metalmatze/digitalocean_exporter:0.6.1
+    restart: unless-stopped
+    environment:
+      DIGITALOCEAN_TOKEN: "${DO_API_TOKEN_READONLY}"   # cria esse env no .env
+    ports:
+      - "9212:9212"
+
+
 volumes:
   prometheus_data:
   alertmanager_data:
