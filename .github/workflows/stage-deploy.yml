@@ -19,8 +19,8 @@ jobs:
       TF_VAR_do_token: ${{ secrets.DO_TOKEN_STAGING }}
 
       # Spaces S3 keys (para provider + backend)
-      SPACES_ACCESS_KEY_ID: ${{ secrets.DO_SPACES_ACCESS_KEY_ID }}
-      SPACES_SECRET_ACCESS_KEY: ${{ secrets.DO_SPACES_SECRET_ACCESS_KEY }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.DO_SPACES_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.DO_SPACES_SECRET_ACCESS_KEY }}
 
       # SSH fingerprint
       TF_VAR_ssh_key_fingerprint: ${{ secrets.DO_SSH_FINGERPRINT_STAGING }}
