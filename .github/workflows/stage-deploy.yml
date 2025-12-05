@@ -46,8 +46,10 @@ jobs:
         id: tf_outputs
         working-directory: terraform
         run: |
-          IP=$(terraform output -raw droplet_ip 2>/dev/null | tr -dc '0-9.' | head -n 1)
+          RAW=$(terraform output droplet_ip)
+          IP=$(echo "$RAW" | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1)
           echo "droplet_ip=$IP" >> "$GITHUB_OUTPUT"
+
 
   deploy:
     needs: infra
