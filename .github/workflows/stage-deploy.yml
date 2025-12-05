@@ -16,13 +16,11 @@ jobs:
       droplet_ip: ${{ steps.tf_outputs.outputs.droplet_ip }}
 
     env:
-      # Terraform vars — agora todas mapeadas corretamente 🔥
       TF_VAR_do_token:             ${{ secrets.DO_TOKEN_STAGING }}
       TF_VAR_spaces_access_id:     ${{ secrets.DO_SPACES_ACCESS_KEY_ID }}
       TF_VAR_spaces_secret_key:    ${{ secrets.DO_SPACES_SECRET_ACCESS_KEY }}
       TF_VAR_ssh_key_fingerprint:  ${{ secrets.DO_SSH_FINGERPRINT_STAGING }}
 
-      # opcional → caso teu Terraform use AWS_* para Spaces SDK
       AWS_ACCESS_KEY_ID:           ${{ secrets.DO_SPACES_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY:       ${{ secrets.DO_SPACES_SECRET_ACCESS_KEY }}
 
@@ -69,11 +67,11 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.DO_DEPLOY_SSH_KEY }}
 
-      - name: Add host fingerprint (🔥 obrigatório)
+      - name: Add host fingerprint
         run: ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
 
-      - name: Test SSH (pra não passar vergonha depois)
-        run: ssh -o BatchMode=yes $DEPLOY_USER@$DEPLOY_HOST "echo 🔥 Conectado com sucesso!"
+      - name: Test SSH
+        run: ssh -o BatchMode=yes $DEPLOY_USER@$DEPLOY_HOST "echo 🔥 Connected!"
 
       - name: Sync stack (idempotente, rápido, cirúrgico)
         run: |
@@ -97,8 +95,19 @@ jobs:
           docker compose up -d --remove-orphans
           EOF
 
-      - name: Show last compose feedback (debug fino)
-        run: ssh $DEPLOY_USER@$DEPLOY_HOST "docker compose ps && docker compose logs --tail=50"
+      - name: Stack report final
+        run: |
+          ssh ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} <<EOF
+            cd ${{ env.DEPLOY_PATH }}
+            echo "🔥 Services:"
+            docker compose ps
+            echo "─────────────────────────────────────────────"
+            echo "📜 Lastest Logs:"
+            docker compose logs --tail=50
+            echo "─────────────────────────────────────────────"
+            echo "🟢 Deployed!"
+          EOF
+
 
   create-pr:
     name: Create PR to main
