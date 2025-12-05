@@ -1,15 +1,19 @@
 global:
-  resolve_timeout: 5m
+  resolve_timeout: 2m
 
 route:
-  receiver: default
-  group_wait: 30s
-  group_interval: 5m
-  repeat_interval: 12h
+  receiver: telegram
+  routes:
+    - matchers:
+        - severity="critical"
+      receiver: telegram
+    - matchers:
+        - severity="warning"
+      receiver: telegram
 
 receivers:
-  - name: default
-    webhook_configs:
-      - url: ${ALERT_WEBHOOK_URL:-http://localhost:9000/alerts}
-        send_resolved: true
-
+  - name: telegram
+    telegram_configs:
+      - bot_token: "${TELEGRAM_BOT_TOKEN}"
+        chat_id: "${TELEGRAM_CHAT_ID}"
+        parse_mode: "Markdown"
