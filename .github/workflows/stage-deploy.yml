@@ -59,6 +59,7 @@ jobs:
       DEPLOY_USER: ${{ secrets.DO_DEPLOY_USER_STAGING }}
       DEPLOY_PATH: ${{ secrets.DO_DEPLOY_PATH_STAGING }}
       MONITOR_ENV: ${{ secrets.MONITOR_ENV_STAGING }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -67,9 +68,14 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.DO_DEPLOY_SSH_KEY }}
 
+      - name: Trust host fingerprint (🔥 item que faltava)
+        run: |
+          ssh-keyscan -H $DEPLOY_HOST >> ~/.ssh/known_hosts
+
       - name: Sync stack
         run: |
-          rsync -avzh --delete --exclude '.git' --exclude '.env' ./ ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:${{ env.DEPLOY_PATH }}
+          rsync -avzh --delete --exclude '.git' --exclude '.env' ./ \
+            ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }}:${{ env.DEPLOY_PATH }}
 
       - name: Push env
         if: env.MONITOR_ENV != ''
