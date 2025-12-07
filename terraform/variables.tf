@@ -81,3 +81,8 @@ variable "destroy" {
   default = false
 }
 
+variable "working_vpc" {
+  description = "UUID da VPC onde o monitoramento deve residir"
+  type        = string
+}
+
