@@ -14,6 +14,8 @@ resource "digitalocean_droplet" "monitor" {
   size   = var.droplet_size
   image  = "ubuntu-24-04-x64"
 
+  vpc_uuid = var.working_vpc
+
   ssh_keys = [
     data.digitalocean_ssh_key.deploy.id,
   ]
