@@ -68,11 +68,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+        with:
+          terraform_version: 1.5.7
+
       - name: Terraform Destroy ⚠ IRREVERSÍVEL
         working-directory: terraform
         run: |
           echo "⚠ EXECUTANDO DEATH PROTOCOL — SEM VOLTA ⚠"
           terraform destroy -var-file=stage.tfvars -auto-approve
+
 
   deploy:
     needs: infra
