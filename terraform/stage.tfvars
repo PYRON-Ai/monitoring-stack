@@ -11,5 +11,5 @@ spaces_region      = "fra1"
 spaces_endpoint    = "https://fra1.digitaloceanspaces.com"
 ssh_key_name       = "monitor-stack-pipeline"
 
-destroy = false
+destroy = true
 

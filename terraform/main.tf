@@ -48,13 +48,13 @@ resource "digitalocean_droplet" "monitor" {
 EOF
 }
 
-#resource "digitalocean_project_resources" "attach" {
-#  project = var.do_project_id # ← ID do projeto STAGING
-#  resources = [
-#    digitalocean_droplet.monitor.urn,
-#    #digitalocean_spaces_bucket.loki.urn,
-#  ]
-#}
+resource "digitalocean_project_resources" "attach" {
+  project = var.do_project_id # ← ID do projeto STAGING
+  resources = [
+    digitalocean_droplet.monitor.urn,
+    #digitalocean_spaces_bucket.loki.urn,
+  ]
+}
 
 
 resource "digitalocean_firewall" "monitoring" {
@@ -64,42 +64,6 @@ resource "digitalocean_firewall" "monitoring" {
   inbound_rule {
     protocol         = "tcp"
     port_range       = "22"
-    source_addresses = ["0.0.0.0/0", "::/0"]
-  }
-
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "3000"
-    source_addresses = ["0.0.0.0/0", "::/0"]
-  }
-
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "9090"
-    source_addresses = ["0.0.0.0/0", "::/0"]
-  }
-
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "3100"
-    source_addresses = ["0.0.0.0/0", "::/0"]
-  }
-
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "3200"
-    source_addresses = ["0.0.0.0/0", "::/0"]
-  }
-
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "9100"
-    source_addresses = ["0.0.0.0/0", "::/0"]
-  }
-
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "9093"
     source_addresses = ["0.0.0.0/0", "::/0"]
   }
 
