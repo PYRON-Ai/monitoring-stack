@@ -86,3 +86,8 @@ variable "working_vpc" {
   type        = string
 }
 
+variable "spaces_bucket_key" {
+  description = "sub folder on main bucket"
+  type        = string
+}
+
