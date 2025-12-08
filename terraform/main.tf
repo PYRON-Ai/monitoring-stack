@@ -24,27 +24,23 @@ resource "digitalocean_droplet" "monitor" {
 
   user_data = <<-EOF
     #!/bin/bash
-    set -euxo pipefail
+    set -eux
 
-    apt-get update
-    apt-get install -y \
-      ca-certificates \
-      curl \
-      gnupg \
-      lsb-release
+    apt-get update -y
+    apt-get install -y ca-certificates curl gnupg lsb-release software-properties-common
 
-    mkdir -p /etc/apt/keyrings
+    install -m 0755 -d /etc/apt/keyrings
     curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    chmod a+r /etc/apt/keyrings/docker.gpg
 
     echo \
-      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
-      > /etc/apt/sources.list.d/docker.list
+      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+      https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
+      | tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-    apt-get update
+    apt-get update -y
     apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-
-    mkdir -p /opt/pyron-monitor-stack
-    chown -R root:root /opt/pyron-monitor-stack
+    systemctl enable docker --now
 EOF
 }
 
