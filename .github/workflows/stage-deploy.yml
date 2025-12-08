@@ -54,6 +54,45 @@ jobs:
           DESTROY=$(grep -E '^destroy *= *' stage.tfvars | awk '{print $3}' | tr -d '"')
           echo "destroy_flag=$DESTROY" >> "$GITHUB_OUTPUT"
 
+  bootstrap:
+    needs: infra
+    if: needs.infra.outputs.destroy_flag != 'true'
+    runs-on: ubuntu-latest
+
+    env:
+      HOST: ${{ needs.infra.outputs.droplet_ip }}
+      USER: ${{ secrets.DO_DEPLOY_USER_STAGING }}
+
+    steps:
+      - uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.DO_DEPLOY_SSH_KEY }}
+
+      - name: Add host fingerprint
+        run: ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
+
+      - name: Provision droplet — instala Docker + deps
+        run: |
+          ssh $USER@$HOST <<'EOF'
+            set -eux
+
+            apt-get update -y
+            apt-get install -y ca-certificates curl gnupg lsb-release software-properties-common
+
+            install -m 0755 -d /etc/apt/keyrings
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+            chmod a+r /etc/apt/keyrings/docker.gpg
+
+            echo "deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+            https://download.docker.com/linux/ubuntu \$(lsb_release -cs) stable" \
+            | tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+            apt-get update -y
+            apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+            systemctl enable docker --now
+          EOF
+
   destroy:
     needs: infra
     if: needs.infra.outputs.destroy_flag == 'true'
@@ -88,7 +127,7 @@ jobs:
 
 
   deploy:
-    needs: infra
+    needs: [infra, bootstrap]
     if: needs.infra.outputs.destroy_flag != 'true'
     runs-on: ubuntu-latest
 
