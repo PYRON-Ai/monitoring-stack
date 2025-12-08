@@ -21,8 +21,6 @@ resource "digitalocean_droplet" "monitor" {
   ]
 
   tags = ["monitoring-stack", local.normalized_env]
-
-  user_data = templatefile("${path.module}/bootstrap.sh", {})
 }
 
 resource "digitalocean_project_resources" "attach" {
