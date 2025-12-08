@@ -1,8 +1,8 @@
 terraform {
   backend "s3" {
     endpoint                    = "https://sgp1.digitaloceanspaces.com"
-    bucket                      = var.spaces_bucket_name
-    key                         = var.spaces_bucket_key
+    bucket                      = "monitor-terraform-states"
+    key                         = "staging/terraform.tfstate"
     region                      = "sgp1"
     force_path_style            = true
     skip_credentials_validation = true

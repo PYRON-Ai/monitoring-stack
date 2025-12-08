@@ -7,9 +7,8 @@ droplet_name = "pyron-monitor-stack"
 droplet_size = "s-2vcpu-4gb"
 
 spaces_bucket_name = "monitor-terraform-states"
-spaces_bucket_key  = "staging/terraform.tfstate"
 spaces_region      = "fra1"
-spaces_endpoint    = "https://sgp1.digitaloceanspaces.com"
+spaces_endpoint    = "https://fra1.digitaloceanspaces.com"
 ssh_key_name       = "monitor-stack-pipeline"
 
 destroy = false
