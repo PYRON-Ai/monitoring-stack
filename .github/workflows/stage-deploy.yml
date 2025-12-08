@@ -76,6 +76,12 @@ jobs:
           ssh $USER@$HOST <<'EOF'
             set -eux
 
+            # Espera o APT liberar travas
+            while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+              echo "🔒 APT ocupado — aguardando 5s..."
+              sleep 5
+            done
+
             apt-get update -y
             apt-get install -y ca-certificates curl gnupg lsb-release software-properties-common
 

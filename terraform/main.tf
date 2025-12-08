@@ -21,6 +21,10 @@ resource "digitalocean_droplet" "monitor" {
   ]
 
   tags = ["monitoring-stack", local.normalized_env]
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "digitalocean_project_resources" "attach" {
