@@ -1,4 +1,4 @@
-name: Deploy Stack
+name: Stage Deploy
 
 permissions:
   contents: read
@@ -196,3 +196,21 @@ jobs:
             echo "🟢 Deployed!"
           EOF
 
+
+  create-pr:
+    name: Create PR to main
+    needs: deploy
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: main
+          branch: ${{ github.ref }}
+          title: "[Auto] Merge ${{ github.ref_name }} into main"
+          body: "Auto-created PR after successful CI checks."
+          draft: false
+          delete-branch: false

@@ -14,37 +14,27 @@ resource "digitalocean_droplet" "monitor" {
   size   = var.droplet_size
   image  = "ubuntu-24-04-x64"
 
+  vpc_uuid = var.working_vpc
+
   ssh_keys = [
     data.digitalocean_ssh_key.deploy.id,
   ]
 
   tags = ["monitoring-stack", local.normalized_env]
 
-  user_data = <<-EOF
-    #!/bin/bash
-    set -euxo pipefail
-
-    apt-get update
-    apt-get install -y \
-      ca-certificates \
-      curl \
-      gnupg \
-      lsb-release
-
-    mkdir -p /etc/apt/keyrings
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-
-    echo \
-      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
-      > /etc/apt/sources.list.d/docker.list
-
-    apt-get update
-    apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
-
-    mkdir -p /opt/pyron-monitor-stack
-    chown -R root:root /opt/pyron-monitor-stack
-EOF
+  lifecycle {
+    prevent_destroy = true
+  }
 }
+
+resource "digitalocean_project_resources" "attach" {
+  project = var.do_project_id # ← ID do projeto STAGING
+  resources = [
+    digitalocean_droplet.monitor.urn,
+    #digitalocean_spaces_bucket.loki.urn,
+  ]
+}
+
 
 resource "digitalocean_firewall" "monitoring" {
   name        = "${var.droplet_name}-${local.normalized_env}-fw"
@@ -53,42 +43,6 @@ resource "digitalocean_firewall" "monitoring" {
   inbound_rule {
     protocol         = "tcp"
     port_range       = "22"
-    source_addresses = ["0.0.0.0/0", "::/0"]
-  }
-
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "3000"
-    source_addresses = ["0.0.0.0/0", "::/0"]
-  }
-
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "9090"
-    source_addresses = ["0.0.0.0/0", "::/0"]
-  }
-
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "3100"
-    source_addresses = ["0.0.0.0/0", "::/0"]
-  }
-
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "3200"
-    source_addresses = ["0.0.0.0/0", "::/0"]
-  }
-
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "9100"
-    source_addresses = ["0.0.0.0/0", "::/0"]
-  }
-
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "9093"
     source_addresses = ["0.0.0.0/0", "::/0"]
   }
 
@@ -105,9 +59,9 @@ resource "digitalocean_firewall" "monitoring" {
   }
 }
 
-resource "digitalocean_spaces_bucket" "loki" {
-  name   = local.bucket_full_name
-  region = var.spaces_region
-  acl    = var.spaces_acl
-}
+#resource "digitalocean_spaces_bucket" "loki" {
+#  name   = local.bucket_full_name
+#  region = var.spaces_region
+#  acl    = var.spaces_acl
+#}
 

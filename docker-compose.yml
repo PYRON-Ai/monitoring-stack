@@ -7,8 +7,7 @@ services:
   prometheus:
     image: prom/prometheus:latest
     <<: *common-restart
-    env_file:
-      - .env
+    env_file: .env
     volumes:
       - ./config/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
       - prometheus_data:/prometheus
@@ -16,8 +15,6 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yaml'
     ports:
       - "9090:9090"
-    depends_on:
-      - alertmanager
 
   alertmanager:
     image: prom/alertmanager:v0.28.0
@@ -30,35 +27,10 @@ services:
     ports:
       - "9093:9093"
 
-  loki:
-    image: grafana/loki:2.9.3
-    <<: *common-restart
-    env_file:
-      - .env
-    volumes:
-      - ./config/loki-config.yaml:/etc/loki/loki.yaml:ro
-      - loki_data:/loki
-    ports:
-      - "3100:3100"
-
-  tempo:
-    image: grafana/tempo:1.7.0
-    <<: *common-restart
-    env_file:
-      - .env
-    volumes:
-      - ./config/tempo-config.yaml:/etc/tempo/tempo.yaml:ro
-      - tempo_data:/var/tempo
-    ports:
-      - "3200:3200"
-    command:
-      - '--config.file=/etc/tempo/tempo.yaml'
-
   grafana:
     image: grafana/grafana:10.0.5
     <<: *common-restart
-    env_file:
-      - .env
+    env_file: .env
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
@@ -66,21 +38,10 @@ services:
       - "3000:3000"
     depends_on:
       - prometheus
-      - loki
-
-  promtail:
-    image: grafana/promtail:2.9.3
-    <<: *common-restart
-    volumes:
-      - ./config/promtail-config.yaml:/etc/promtail/config.yaml:ro
-      - /var/log:/var/log:ro
-      - /var/lib/docker/containers:/var/lib/docker/containers:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    depends_on:
-      - loki
+      - alertmanager
 
   node-exporter:
-    image: prom/node-exporter:1.7.2
+    image: prom/node-exporter:v1.7.0
     <<: *common-restart
     ports:
       - "9100:9100"
@@ -93,10 +54,16 @@ services:
       - '--path.sysfs=/host/sys'
       - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($|/)'
 
+  digitalocean-exporter:
+    image: metalmatze/digitalocean_exporter:0.6.1
+    restart: unless-stopped
+    environment:
+      DIGITALOCEAN_TOKEN: "${DO_API_TOKEN_READONLY}"   # cria esse env no .env
+    ports:
+      - "9212:9212"
+
+
 volumes:
   prometheus_data:
-  grafana_data:
-  loki_data:
-  tempo_data:
   alertmanager_data:
-
+  grafana_data:

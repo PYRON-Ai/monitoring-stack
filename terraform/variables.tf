@@ -7,7 +7,7 @@ variable "do_token" {
 variable "do_region" {
   description = "Region where the resources will be provisioned."
   type        = string
-  default     = "fra1"
+  default     = "SGP1"
 }
 
 variable "droplet_name" {
@@ -60,5 +60,29 @@ variable "spaces_region" {
   description = "Region where the Spaces bucket lives (used by tfvars but also for sanity)."
   type        = string
   default     = "fra1"
+}
+
+variable "do_project_id" {
+  type = string
+}
+
+variable "spaces_access_id" {
+  type      = string
+  sensitive = true
+}
+
+variable "spaces_secret_key" {
+  type      = string
+  sensitive = true
+}
+
+variable "destroy" {
+  type    = bool
+  default = false
+}
+
+variable "working_vpc" {
+  description = "UUID da VPC onde o monitoramento deve residir"
+  type        = string
 }
 
