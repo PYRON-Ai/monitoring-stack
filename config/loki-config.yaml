@@ -17,7 +17,7 @@ schema_config:
   configs:
     - from: 2020-10-15
       store: boltdb-shipper
-      object_store: s3
+      object_store: filesystem          # <-- MUDADO PARA LOCAL
       schema: v11
       index:
         prefix: index_
@@ -27,19 +27,17 @@ storage_config:
   boltdb_shipper:
     active_index_directory: /loki/index
     cache_location: /loki/cache
-    shared_store: s3
-  aws:
-    s3: s3://$SPACES_KEY:$SPACES_SECRET@${SPACES_BUCKET}/${SPACES_PREFIX:-loki}
-    s3forcepathstyle: true
-    region: ${SPACES_REGION}
-    endpoint: ${SPACES_ENDPOINT}
-    http_config:
-      idle_conn_timeout: 90s
+    shared_store: filesystem            # <-- MUDADO PARA LOCAL
+
+  filesystem:
+    directory: /loki/chunks             # <-- ONDE VAI GUARDAR OS CHUNKS
+
 limits_config:
   enforce_metric_name: false
+
 chunk_store_config:
-  max_look_back_period: 168h
+  max_look_back_period: 48h             # <-- SÓ 2 DIAS
 
 table_manager:
   retention_deletes_enabled: true
-  retention_period: 720h
+  retention_period: 48h                 # <-- RETENÇÃO DE 2 DIAS
