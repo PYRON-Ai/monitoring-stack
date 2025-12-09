@@ -189,15 +189,13 @@ jobs:
 
             docker run --rm -v loki_data:/loki alpine sh -c "\
               mkdir -p /loki && \
-              mkdir -p /loki/index && \
-              mkdir -p /loki/cache && \
-              mkdir -p /loki/chunks && \
-              mkdir -p /loki/compactor && \
-              mkdir -p /loki/boltdb-shipper-compactor \
+              mkdir -p /loki/index /loki/cache /loki/chunks /loki/compactor /loki/boltdb-shipper-compactor && \
+              chown -R 10001:10001 /loki \
             "
 
             docker run --rm -v loki_wal:/wal alpine sh -c "\
-              mkdir -p /wal \
+              mkdir -p /wal && \
+              chown -R 10001:10001 /wal \
             "
 
             echo "📁 Loki volume bootstrap completed."
