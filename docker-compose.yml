@@ -18,12 +18,14 @@ services:
 
   alertmanager:
     image: prom/alertmanager:v0.28.0
-    <<: *common-restart
+    restart: unless-stopped
+    env_file: .env
     volumes:
       - ./alertmanager/config.yml:/etc/alertmanager/config.yml:ro
       - alertmanager_data:/alertmanager
     command:
       - '--config.file=/etc/alertmanager/config.yml'
+      - '--config.expand-env'
     ports:
       - "9093:9093"
 
