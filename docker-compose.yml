@@ -10,6 +10,7 @@ services:
     env_file: .env
     volumes:
       - ./config/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
+      - ./config/rules:/etc/prometheus/rules:ro
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yaml'

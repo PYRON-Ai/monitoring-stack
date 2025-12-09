@@ -15,5 +15,21 @@ receivers:
   - name: telegram
     telegram_configs:
       - bot_token: "${TELEGRAM_BOT_TOKEN}"
-        chat_id: ${TELEGRAM_CHAT_ID}
+        chat_id: "${TELEGRAM_CHAT_ID}"
         parse_mode: "Markdown"
+        message: >
+          {{ if eq .Status "firing" -}}
+          🚨 *Alert: {{ .CommonLabels.alertname }}*
+          Severity: *{{ .CommonLabels.severity }}*
+
+          *{{ .CommonAnnotations.summary }}*
+          {{ .CommonAnnotations.description }}
+
+          Instance: {{ .CommonLabels.instance }}
+          {{- else -}}
+          ✅ *Resolved: {{ .CommonLabels.alertname }}*
+
+          {{ .CommonAnnotations.summary }}
+          Instance: {{ .CommonLabels.instance }}
+          {{- end }}
+
