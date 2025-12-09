@@ -62,8 +62,28 @@ services:
     ports:
       - "9212:9212"
 
+  loki:
+    image: grafana/loki:2.9.0
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./config/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    restart: unless-stopped
+    volumes:
+      - /var/log:/var/log:ro
+      - ./config/promtail-config.yaml:/etc/promtail/config.yaml:ro
+    command: -config.file=/etc/promtail/config.yaml
+    depends_on:
+      - loki
 
 volumes:
   prometheus_data:
   alertmanager_data:
   grafana_data:
+  loki_data:
