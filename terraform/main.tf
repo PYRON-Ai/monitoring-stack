@@ -23,7 +23,7 @@ resource "digitalocean_droplet" "monitor" {
   tags = ["monitoring-stack", local.normalized_env]
 
   lifecycle {
-    prevent_destroy = false
+    prevent_destroy = true
   }
 }
 
