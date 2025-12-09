@@ -28,7 +28,7 @@ resource "digitalocean_droplet" "monitor" {
 }
 
 resource "digitalocean_project_resources" "attach" {
-  project = var.do_project_id # ← ID do projeto STAGING
+  project = var.do_project_id
   resources = [
     digitalocean_droplet.monitor.urn,
     #digitalocean_spaces_bucket.loki.urn,
