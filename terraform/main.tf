@@ -23,12 +23,12 @@ resource "digitalocean_droplet" "monitor" {
   tags = ["monitoring-stack", local.normalized_env]
 
   lifecycle {
-    prevent_destroy = false
+    prevent_destroy = true
   }
 }
 
 resource "digitalocean_project_resources" "attach" {
-  project = var.do_project_id # ← ID do projeto STAGING
+  project = var.do_project_id
   resources = [
     digitalocean_droplet.monitor.urn,
     #digitalocean_spaces_bucket.loki.urn,
