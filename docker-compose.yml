@@ -67,15 +67,8 @@ services:
     restart: unless-stopped
     entrypoint: ["/bin/sh", "-c"]
     command: >
-      mkdir -p /loki/index /loki/cache /loki/chunks /loki/compactor /loki/boltdb-shipper-compactor /wal &&
+      mkdir -p /loki/index /loki/cache /loki/chunks /loki/compactor /loki/boltdb-shipper-compactor /wal;
       exec /usr/bin/loki -config.file=/etc/loki/loki-config.yaml
-    volumes:
-      - ./config/loki-config.yaml:/etc/loki/loki-config.yaml:ro
-      - loki_data:/loki
-      - loki_wal:/wal
-    ports:
-      - "3100:3100"
-
 
   promtail:
     image: grafana/promtail:2.9.0
