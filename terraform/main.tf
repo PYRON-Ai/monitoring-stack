@@ -49,7 +49,7 @@ resource "digitalocean_firewall" "monitoring" {
   inbound_rule {
     protocol         = "tcp"
     port_range       = "3100"
-    source_addresses = ["10.0.0.0/16"]
+    source_addresses = ["10.1.0.0/16"]
   }
 
   outbound_rule {
