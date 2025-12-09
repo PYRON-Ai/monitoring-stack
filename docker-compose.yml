@@ -74,11 +74,13 @@ services:
 
   promtail:
     image: grafana/promtail:2.9.0
-    restart: unless-stopped
     volumes:
+      - ./config/promtail.yaml:/etc/promtail/promtail.yaml:ro
+      - promtail_positions:/var/lib/promtail
       - /var/log:/var/log:ro
-      - ./config/promtail-config.yaml:/etc/promtail/config.yaml:ro
-    command: -config.file=/etc/promtail/config.yaml
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: -config.file=/etc/promtail/promtail.yaml
     depends_on:
       - loki
 
@@ -87,4 +89,4 @@ volumes:
   alertmanager_data:
   grafana_data:
   loki_data:
-  loki_wal:
+  promtail_positions:
