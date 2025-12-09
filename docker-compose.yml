@@ -17,7 +17,7 @@ services:
       - "9090:9090"
 
   alertmanager:
-    image: prom/alertmanager:v0.28.0
+    image: prom/alertmanager:latest
     restart: unless-stopped
     env_file: .env
     volumes:
@@ -25,7 +25,6 @@ services:
       - alertmanager_data:/alertmanager
     command:
       - '--config.file=/etc/alertmanager/config.yml'
-      - '--config.expand-env'
     ports:
       - "9093:9093"
 
