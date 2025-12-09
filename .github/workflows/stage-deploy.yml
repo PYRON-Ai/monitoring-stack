@@ -177,7 +177,7 @@ jobs:
 
       - name: Bootstrap Loki volumes (directories fix)
         run: |
-          ssh $DEPLOY_USER@$DEPLOY_HOST <<'EOF'
+          ssh $DEPLOY_USER@$DEPLOY_HOST <<EOF
             set -eux
             cd $DEPLOY_PATH
 
