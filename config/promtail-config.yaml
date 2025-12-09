@@ -3,25 +3,50 @@ server:
   grpc_listen_port: 0
 
 positions:
-  filename: /tmp/positions.yaml
+  filename: /var/lib/promtail/positions.yaml
 
 clients:
   - url: http://loki:3100/loki/api/v1/push
 
 scrape_configs:
+
+  # ============================
+  # LOGS DO SISTEMA
+  # ============================
   - job_name: system
     static_configs:
-      - targets:
-          - localhost
+      - targets: [localhost]
         labels:
           job: varlogs
-          __path__: /var/log/**/*.log
+          __path__: /var/log/*.log
 
-  - job_name: docker-containers
+  # ============================
+  # LOGS DE TODOS OS CONTAINERS
+  # ============================
+  - job_name: docker
     docker_sd_configs:
       - host: unix:///var/run/docker.sock
         refresh_interval: 5s
+
     relabel_configs:
-      - source_labels: ['__meta_docker_container_log_stream']
+
+      # extrai o container ID
+      - source_labels: ['__meta_docker_container_id']
+        target_label: 'container_id'
+
+      # extrai o nome do container
+      - source_labels: ['__meta_docker_container_name']
+        target_label: 'container_name'
+
+      # extrai o serviço (com docker-compose isso é mágico)
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_service']
+        target_label: 'service'
+
+      # extrai o stack (opcional)
+      - source_labels: ['__meta_docker_container_label_com_docker_compose_project']
+        target_label: 'stack'
+
+      # o path real dos logs (regra crítica!)
+      - source_labels: ['__meta_docker_container_id']
         target_label: '__path__'
-        replacement: /var/lib/docker/containers/*/*.log
+        replacement: /var/lib/docker/containers/$1/$1-json.log
