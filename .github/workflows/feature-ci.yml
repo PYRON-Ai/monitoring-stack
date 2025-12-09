@@ -40,7 +40,7 @@ jobs:
         run: terraform fmt -check
 
   create-pr:
-    name: Create PR to stage
+    name: Create PR to Deploy
     needs: ci-check
     if: github.event_name == 'push'
     runs-on: ubuntu-latest

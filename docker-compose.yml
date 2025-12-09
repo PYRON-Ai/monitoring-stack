@@ -62,8 +62,31 @@ services:
     ports:
       - "9212:9212"
 
+  loki:
+    image: grafana/loki:2.9.0
+    restart: unless-stopped
+    volumes:
+      - ./config/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    volumes:
+      - ./config/promtail.yaml:/etc/promtail/promtail.yaml:ro
+      - promtail_positions:/var/lib/promtail
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: -config.file=/etc/promtail/promtail.yaml
+    depends_on:
+      - loki
 
 volumes:
   prometheus_data:
   alertmanager_data:
   grafana_data:
+  loki_data:
+  promtail_positions:

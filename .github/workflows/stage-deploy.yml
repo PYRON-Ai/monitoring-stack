@@ -175,7 +175,33 @@ jobs:
           chmod 600 ${DEPLOY_PATH}/.env
           EOF
 
-      - name: Deploy + Restart Stack (sem dó)
+      - name: Bootstrap Loki volumes (directories fix)
+        run: |
+          ssh $DEPLOY_USER@$DEPLOY_HOST <<EOF
+            set -eux
+            cd $DEPLOY_PATH
+
+            # Garante que os volumes existem
+            docker volume create loki_data || true
+            docker volume create loki_wal || true
+
+            echo "📦 Preparing Loki directory structure..."
+
+            docker run --rm -v loki_data:/loki alpine sh -c "\
+              mkdir -p /loki && \
+              mkdir -p /loki/index /loki/cache /loki/chunks /loki/compactor /loki/boltdb-shipper-compactor && \
+              chown -R 10001:10001 /loki \
+            "
+
+            docker run --rm -v loki_wal:/wal alpine sh -c "\
+              mkdir -p /wal && \
+              chown -R 10001:10001 /wal \
+            "
+
+            echo "📁 Loki volume bootstrap completed."
+          EOF
+
+      - name: Deploy + Restart Stack
         run: |
           ssh $DEPLOY_USER@$DEPLOY_HOST <<EOF
           cd $DEPLOY_PATH

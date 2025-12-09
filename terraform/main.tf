@@ -28,7 +28,7 @@ resource "digitalocean_droplet" "monitor" {
 }
 
 resource "digitalocean_project_resources" "attach" {
-  project = var.do_project_id # ← ID do projeto STAGING
+  project = var.do_project_id
   resources = [
     digitalocean_droplet.monitor.urn,
     #digitalocean_spaces_bucket.loki.urn,
@@ -44,6 +44,12 @@ resource "digitalocean_firewall" "monitoring" {
     protocol         = "tcp"
     port_range       = "22"
     source_addresses = ["0.0.0.0/0", "::/0"]
+  }
+
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "3100"
+    source_addresses = ["10.1.0.0/16"]
   }
 
   outbound_rule {

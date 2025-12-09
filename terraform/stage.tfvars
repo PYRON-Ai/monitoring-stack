@@ -1,6 +1,6 @@
-environment   = "staging"
-working_vpc   = "4ba63b32-b79b-4969-9081-ecee8697bb84"
-do_project_id = "4d35904f-7b87-4b19-9661-c521590ea17c"
+environment   = "production"
+working_vpc   = "618f3ec4-335d-46de-a1d5-94b7f266d04f"
+do_project_id = "b72e1059-d7ac-49ac-b845-d4f7b3deba4e"
 do_region     = "SGP1"
 
 droplet_name = "pyron-monitor-stack"
