@@ -19,17 +19,17 @@ receivers:
         parse_mode: "Markdown"
         message: >
           {{ if eq .Status "firing" -}}
-          🚨 *Alert: {{ .CommonLabels.alertname }}*
-          Severity: *{{ .CommonLabels.severity }}*
+          🚨 *Alert: {{ .CommonLabels.alertname }}*\n
+          Severity: *{{ .CommonLabels.severity }}*\n\n'
 
-          *{{ .CommonAnnotations.summary }}*
-          {{ .CommonAnnotations.description }}
+          *{{ .CommonAnnotations.summary }}*\n
+          {{ .CommonAnnotations.description }}\n\n
 
           Instance: {{ .CommonLabels.instance }}
           {{- else -}}
-          ✅ *Resolved: {{ .CommonLabels.alertname }}*
+          ✅ *Resolved: {{ .CommonLabels.alertname }}*\n\n
 
-          {{ .CommonAnnotations.summary }}
+          {{ .CommonAnnotations.summary }}\n\n
           Instance: {{ .CommonLabels.instance }}
           {{- end }}
 
