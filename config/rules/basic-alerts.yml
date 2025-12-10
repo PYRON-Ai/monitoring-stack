@@ -97,8 +97,8 @@ groups:
 
       # ——— PROMETHEUS IN TROUBLE ———
       - alert: PrometheusInternalErrors
-        expr: rate(prometheus_tsdb_head_chunks_created_total[5m]) < 1
-        for: 2m
+        expr: rate(prometheus_tsdb_head_chunks_created_total[15m]) < 1
+        for: 10m
         labels:
           severity: critical
         annotations:
