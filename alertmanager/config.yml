@@ -17,19 +17,21 @@ receivers:
       - bot_token: "${TELEGRAM_BOT_TOKEN}"
         chat_id: "${TELEGRAM_CHAT_ID}"
         parse_mode: "Markdown"
-        message: >
+        message: |
           {{ if eq .Status "firing" -}}
-          🚨 *Alert: {{ .CommonLabels.alertname }}*\n
-          Severity: *{{ .CommonLabels.severity }}*\n\n'
+          🚨 *Alert: {{ .CommonLabels.alertname }}*  
+          *Severity:* {{ .CommonLabels.severity }}  
 
-          *{{ .CommonAnnotations.summary }}*\n
-          {{ .CommonAnnotations.description }}\n\n
+          *{{ .CommonAnnotations.summary }}*  
+          {{ .CommonAnnotations.description }}  
 
-          Instance: {{ .CommonLabels.instance }}
+          *Instance:* {{ or .CommonLabels.job .CommonLabels.instance }}
+
           {{- else -}}
-          ✅ *Resolved: {{ .CommonLabels.alertname }}*\n\n
+          ✅ *Resolved: {{ .CommonLabels.alertname }}*  
 
-          {{ .CommonAnnotations.summary }}\n\n
-          Instance: {{ .CommonLabels.instance }}
+          {{ .CommonAnnotations.summary }}  
+
+          *Instance:* {{ or .CommonLabels.job .CommonLabels.instance }}
           {{- end }}
 

@@ -97,10 +97,11 @@ groups:
 
       # ——— PROMETHEUS IN TROUBLE ———
       - alert: PrometheusInternalErrors
-        expr: rate(prometheus_tsdb_head_chunks_created_total[15m]) < 1
-        for: 10m
+        expr: rate(prometheus_tsdb_head_chunks_created_total[30m]) == 0
+        for: 15m
         labels:
           severity: critical
         annotations:
-          summary: "TSDB acting strange."
-          description: "Prometheus isn't creating new chunks. A freeze may be coming."
+          summary: "TSDB frozen."
+          description: "No chunks were created in the last 30 minutes. Ingestion may be stalled."
+
