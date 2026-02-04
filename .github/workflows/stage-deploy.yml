@@ -103,6 +103,42 @@ jobs:
             systemctl enable docker --now
           EOF
 
+      - name: Install and configure Fail2ban (CI safe)
+        run: |
+          ssh root@$HOST <<'EOF'
+          set -eux
+
+          apt-get update -y
+          apt-get install -y fail2ban
+
+          cat > /etc/fail2ban/jail.d/sshd.local <<'JAIL_EOF'
+          [sshd]
+          enabled = true
+          backend = systemd
+          port = ssh
+          maxretry = 5
+          findtime = 10m
+          bantime = 1h
+          JAIL_EOF
+
+          systemctl enable fail2ban
+          systemctl restart fail2ban
+
+          echo "Waiting for fail2ban socket..."
+
+          for i in {1..10}; do
+            if [ -S /var/run/fail2ban/fail2ban.sock ]; then
+              echo "Socket ready."
+              break
+            fi
+            sleep 1
+          done
+
+          fail2ban-client status || true
+          fail2ban-client status sshd || true
+
+          EOF
+
   destroy:
     needs: infra
     if: needs.infra.outputs.destroy_flag == 'true'
