@@ -66,8 +66,7 @@ Terraform runs as the first job (`infra-staging` / `infra-production`) in the Gi
 The automation runs as three coordinated workflows:
 
 1. `feature-ci.yml`: triggers on `feature/**` pushes (and PRs to `stage`) and validates `docker compose config` plus `terraform fmt`, then automatically opens a PR against `stage` using `peter-evans/create-pull-request`.
-2. `stage-deploy.yml`: reacts to `stage` pushes, provisions staging infrastructure via Terraform, deploys the stack, and if successful, opens a PR from `stage` to `main`.
-3. `prod-deploy.yml`: handles `main` pushes by provisioning and deploying the production stack.
+2. `stage-deploy.yml`: reacts to `stage` pushes, provisions staging infrastructure via Terraform and deploys the stack.
 
 ### Required GitHub secrets
 - `DO_TOKEN_STAGING` / `DO_TOKEN_PRODUCTION`: DigitalOcean API tokens capable of managing droplets, firewalls, and Spaces.
