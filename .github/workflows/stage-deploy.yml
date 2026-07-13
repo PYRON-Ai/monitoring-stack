@@ -244,6 +244,15 @@ jobs:
           cd $DEPLOY_PATH
           docker compose pull
           docker compose up -d --remove-orphans
+
+          # Prometheus doesn't hot-reload the config on its own. With
+          # --web.enable-lifecycle (set in the compose) we can POST /-/reload so
+          # config changes (new scrape jobs, etc.) take effect WITHOUT a restart
+          # — no scrape gap. Give it a moment to be up, then reload; retry once.
+          sleep 5
+          curl -fsS -X POST http://localhost:9090/-/reload && echo "prometheus config reloaded" \
+            || { sleep 5; curl -fsS -X POST http://localhost:9090/-/reload && echo "prometheus reloaded (retry)"; } \
+            || echo "WARN: prometheus reload failed (config still applied on next restart)"
           EOF
 
       - name: Stack report final
