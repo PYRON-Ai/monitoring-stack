@@ -1,11 +1,9 @@
-version: "3.9"
-
 x-common-restart: &common-restart
   restart: unless-stopped
 
 services:
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.53.0
     <<: *common-restart
     env_file: .env
     volumes:
@@ -18,8 +16,8 @@ services:
       - "9090:9090"
 
   alertmanager:
-    image: prom/alertmanager:latest
-    restart: unless-stopped
+    image: prom/alertmanager:v0.27.0
+    <<: *common-restart
     env_file: .env
     volumes:
       - ./alertmanager/config.yml:/etc/alertmanager/config.yml:ro
@@ -56,14 +54,6 @@ services:
       - '--path.sysfs=/host/sys'
       - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($|/)'
 
-  digitalocean-exporter:
-    image: metalmatze/digitalocean_exporter:0.6.1
-    restart: unless-stopped
-    environment:
-      DIGITALOCEAN_TOKEN: "${DO_API_TOKEN_READONLY}"   # cria esse env no .env
-    ports:
-      - "9212:9212"
-
   loki:
     image: grafana/loki:2.9.0
     restart: unless-stopped
@@ -76,13 +66,14 @@ services:
 
   promtail:
     image: grafana/promtail:2.9.0
+    <<: *common-restart
     volumes:
-      - ./config/promtail.yaml:/etc/promtail/promtail.yaml:ro
+      - ./config/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
       - promtail_positions:/var/lib/promtail
       - /var/log:/var/log:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock
-    command: -config.file=/etc/promtail/promtail.yaml
+    command: -config.file=/etc/promtail/promtail-config.yaml
     depends_on:
       - loki
 

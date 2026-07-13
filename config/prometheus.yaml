@@ -25,43 +25,14 @@ scrape_configs:
         labels:
           instance_name: "monitor-server"
 
-  - job_name: 'digitalocean'
-    static_configs:
-      - targets: ['digitalocean-exporter:9212']
-        labels:
-          instance_name: "digitalocean"
-
-  - job_name: "Frontend"
-    metrics_path: /metrics
-    static_configs:
-      - targets: ["10.1.0.8:9100"]
-        labels:
-          instance_name: "frontend-server"
-
-  - job_name: "Webhook"
-    metrics_path: /metrics
-    static_configs:
-      - targets: ["10.1.0.9:9100"]
-        labels:
-          instance_name: "webhook-server"
-
-  - job_name: "Backend"
-    metrics_path: /metrics
-    static_configs:
-      - targets: ["10.1.0.7:9100"]
-        labels:
-          instance_name: "backend-server"
-
-#  - job_name: "Ingestor-Server"
-#    metrics_path: /metrics
-#    static_configs:
-#      - targets: ["10.1.0.7:9100"]
-#        labels:
-#          instance_name: "ingestor-server"
-
-#  - job_name: "Ingestor-Metrics"
-#    metrics_path: /metrics
-#    static_configs:
-#      - targets: ["10.1.0.7:8000"]
-#        labels:
-#          instance_name: "ingestor-metrics"
+  # NOTE: the digitalocean-exporter was removed — the project is dead (last
+  # release 2020) and has no DOKS collector, so it never saw the cluster (only
+  # droplet/LB inventory, which doctl/the DO panel already show).
+  #
+  # The old per-droplet node-exporter jobs (frontend/webhook/backend at 10.1.0.x)
+  # were also removed — those droplets were retired in the k8s migration.
+  #
+  # App-level metrics (req/s, latency, queue depth) will come from the services
+  # exposing /metrics (prom-client), scraped via the cluster once instrumented
+  # (staging monitoring phase 2). Cluster infra metrics come from metrics-server
+  # / the DO panel for now.
