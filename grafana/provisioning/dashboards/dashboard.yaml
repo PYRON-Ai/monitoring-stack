@@ -1,0 +1,15 @@
+apiVersion: 1
+
+providers:
+  - name: "pyron-dashboards"
+    orgId: 1
+    folder: "Pyron"
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      # JSON dashboards live here; the compose mounts grafana/provisioning into
+      # /etc/grafana/provisioning, so this is the in-container path.
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false

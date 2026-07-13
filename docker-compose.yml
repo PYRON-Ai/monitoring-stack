@@ -12,6 +12,10 @@ services:
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yaml'
+      # Enable the lifecycle API so the pipeline can POST /-/reload to pick up
+      # config changes WITHOUT a restart (zero scrape gap). Safe here: nothing is
+      # publicly exposed (access is SSH-tunnel only, no public port on 9090).
+      - '--web.enable-lifecycle'
     ports:
       - "9090:9090"
 
