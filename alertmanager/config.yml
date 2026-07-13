@@ -1,37 +1,27 @@
+# STAGING alertmanager config — NO external notifications.
+#
+# Alerts that interrupt (Telegram/paging) are a PRODUCTION concern. Staging is
+# where we break things on purpose (tests, deploys, experiments); routing that
+# noise to Telegram causes alert fatigue and drowns the real prod alerts. So in
+# staging the Alertmanager runs with a NULL receiver: alerts still fire and are
+# visible in the Alertmanager UI (:9093) and Grafana, they just don't page anyone.
+#
+# The Telegram integration (bot_token/chat_id) lives ONLY in the production
+# config, added when prod comes back. Keeping it out of staging also removes the
+# ${TELEGRAM_*} placeholder that Alertmanager can't expand (it doesn't do env
+# substitution — see the null receiver below, no placeholders to break).
 global:
   resolve_timeout: 2m
 
 route:
-  receiver: telegram
+  receiver: "null"
   routes:
     - matchers:
         - severity="critical"
-      receiver: telegram
+      receiver: "null"
     - matchers:
         - severity="warning"
-      receiver: telegram
+      receiver: "null"
 
 receivers:
-  - name: telegram
-    telegram_configs:
-      - bot_token: "${TELEGRAM_BOT_TOKEN}"
-        chat_id: "${TELEGRAM_CHAT_ID}"
-        parse_mode: "Markdown"
-        message: |
-          {{ if eq .Status "firing" -}}
-          🚨 *Alert: {{ .CommonLabels.alertname }}*  
-          *Severity:* {{ .CommonLabels.severity }}  
-
-          *{{ .CommonAnnotations.summary }}*  
-          {{ .CommonAnnotations.description }}  
-
-          *Instance:* {{ or .CommonLabels.job .CommonLabels.instance }}
-
-          {{- else -}}
-          ✅ *Resolved: {{ .CommonLabels.alertname }}*  
-
-          {{ .CommonAnnotations.summary }}  
-
-          *Instance:* {{ or .CommonLabels.job .CommonLabels.instance }}
-          {{- end }}
-
+  - name: "null"
