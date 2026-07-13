@@ -25,14 +25,27 @@ scrape_configs:
         labels:
           instance_name: "monitor-server"
 
-  # NOTE: the digitalocean-exporter was removed — the project is dead (last
-  # release 2020) and has no DOKS collector, so it never saw the cluster (only
-  # droplet/LB inventory, which doctl/the DO panel already show).
+  # ── DOKS cluster: ingress-nginx metrics ──────────────────────────────────
+  # The ingress controller sees ALL app traffic, so its metrics give request
+  # rate, latency (p50/p95/p99) and status codes PER service — WITHOUT
+  # instrumenting the apps. Enabled in doks-iac (controller.metrics.enabled=true)
+  # and exposed as NodePort 30254. We scrape it at the cluster's system node
+  # private IP over the shared VPC (the monitoring droplet is 10.0.0.2, the node
+  # is 10.0.0.4 — same VPC pyron-vpc-staging). NodePort answers on every node;
+  # 10.0.0.4 is the fixed min-pool system node, a stable target for staging.
+  - job_name: 'ingress-nginx'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['10.0.0.4:30254']
+        labels:
+          instance_name: "doks-ingress"
+          cluster: "pyron-doks-staging"
+
+  # NOTE: the digitalocean-exporter was removed (dead since 2020, no DOKS
+  # collector) and the old per-droplet node-exporter jobs (10.1.0.x) too — those
+  # droplets were retired in the k8s migration.
   #
-  # The old per-droplet node-exporter jobs (frontend/webhook/backend at 10.1.0.x)
-  # were also removed — those droplets were retired in the k8s migration.
-  #
-  # App-level metrics (req/s, latency, queue depth) will come from the services
-  # exposing /metrics (prom-client), scraped via the cluster once instrumented
-  # (staging monitoring phase 2). Cluster infra metrics come from metrics-server
-  # / the DO panel for now.
+  # Deeper app-level metrics (BullMQ queue depth, rules-compiled, per-agent) come
+  # later via prom-client in the services (phase 2). The ingress already gives
+  # the request-rate/latency "graph over time". Cluster CPU/RAM: metrics-server /
+  # DO panel for now.
