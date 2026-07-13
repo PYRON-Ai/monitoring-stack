@@ -1,7 +1,7 @@
-environment   = "production"
-working_vpc   = "618f3ec4-335d-46de-a1d5-94b7f266d04f"
-do_project_id = "b72e1059-d7ac-49ac-b845-d4f7b3deba4e"
-do_region     = "SGP1"
+environment   = "staging"
+working_vpc   = "4ba63b32-b79b-4969-9081-ecee8697bb84"
+do_project_id = "4d35904f-7b87-4b19-9661-c521590ea17c"
+do_region     = "sgp1"
 
 droplet_name = "pyron-monitor-stack"
 droplet_size = "s-2vcpu-4gb"
@@ -11,5 +11,6 @@ spaces_region      = "fra1"
 spaces_endpoint    = "https://fra1.digitaloceanspaces.com"
 ssh_key_name       = "monitor-stack-pipeline"
 
-destroy = true
+# false = CREATE/maintain the staging monitoring droplet (not a destroy run).
+destroy = false
 
