@@ -16,6 +16,14 @@ services:
       # config changes WITHOUT a restart (zero scrape gap). Safe here: nothing is
       # publicly exposed (access is SSH-tunnel only, no public port on 9090).
       - '--web.enable-lifecycle'
+      # Accept remote_write from the in-cluster prometheus-agent. The webhook
+      # scales to 100+ pods; a single external NodePort scrape hits one random
+      # pod per interval (serrated, useless aggregation). Instead an ephemeral
+      # agent INSIDE the cluster discovers every webhook pod (kubernetes_sd) and
+      # remote_writes the per-pod series here, so sum()/max() over the pods is
+      # exact. The agent lives in the ephemeral namespace and dies with the burn
+      # teardown — the permanent monitoring still runs OUTSIDE the cluster.
+      - '--web.enable-remote-write-receiver'
     ports:
       - "9090:9090"
 
