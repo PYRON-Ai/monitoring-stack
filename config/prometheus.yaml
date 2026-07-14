@@ -41,6 +41,20 @@ scrape_configs:
           instance_name: "doks-ingress"
           cluster: "pyron-doks-staging"
 
+  # ── Webhook app metrics (prom-client) ────────────────────────────────────
+  # The webhook exposes /metrics on a dedicated port (9090), surfaced as
+  # NodePort 30902 by the webhook-metrics Service (k8s-ephemeral). This gives
+  # what the ingress can't see: BullMQ queue depth, per-agent backlog,
+  # rules_compiled, and Node runtime (CPU/RAM/event-loop). Scraped over the VPC
+  # at the system node IP, same bridge as the ingress. (Ephemeral test env.)
+  - job_name: 'webhook-app'
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['10.0.0.4:30902']
+        labels:
+          instance_name: "webhook-ephemeral"
+          cluster: "pyron-doks-staging"
+
   # NOTE: the digitalocean-exporter was removed (dead since 2020, no DOKS
   # collector) and the old per-droplet node-exporter jobs (10.1.0.x) too — those
   # droplets were retired in the k8s migration.
