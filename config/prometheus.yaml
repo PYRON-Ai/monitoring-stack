@@ -41,19 +41,24 @@ scrape_configs:
           instance_name: "doks-ingress"
           cluster: "pyron-doks-staging"
 
-  # ── Webhook app metrics (prom-client) ────────────────────────────────────
-  # The webhook exposes /metrics on a dedicated port (9090), surfaced as
-  # NodePort 30902 by the webhook-metrics Service (k8s-ephemeral). This gives
-  # what the ingress can't see: BullMQ queue depth, per-agent backlog,
-  # rules_compiled, and Node runtime (CPU/RAM/event-loop). Scraped over the VPC
-  # at the system node IP, same bridge as the ingress. (Ephemeral test env.)
-  - job_name: 'webhook-app'
-    metrics_path: /metrics
-    static_configs:
-      - targets: ['10.0.0.4:30902']
-        labels:
-          instance_name: "webhook-ephemeral"
-          cluster: "pyron-doks-staging"
+  # ── Webhook app metrics ──────────────────────────────────────────────────
+  # DISABLED under the burn: this NodePort (30902) scrape hits ONE random pod
+  # per interval (kube-proxy load-balances the NodePort across 100+ pods), so
+  # BullMQ queue depth / backlog came out serrated and un-aggregatable. The
+  # in-cluster ephemeral prometheus-agent now discovers every webhook pod and
+  # remote_writes per-pod series here (see monitoring-stack docker-compose
+  # --web.enable-remote-write-receiver + pyron-webhook k8s-ephemeral/
+  # prometheus-agent.yaml). Running BOTH would double-count in sum(), so this
+  # single-target job stays OFF while the agent is up. Re-enable (and stop the
+  # agent) only if you ever want the low-pod-count NodePort path back.
+  #
+  # - job_name: 'webhook-app'
+  #   metrics_path: /metrics
+  #   static_configs:
+  #     - targets: ['10.0.0.4:30902']
+  #       labels:
+  #         instance_name: "webhook-ephemeral"
+  #         cluster: "pyron-doks-staging"
 
   # NOTE: the digitalocean-exporter was removed (dead since 2020, no DOKS
   # collector) and the old per-droplet node-exporter jobs (10.1.0.x) too — those

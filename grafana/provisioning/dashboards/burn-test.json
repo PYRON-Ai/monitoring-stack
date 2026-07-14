@@ -1,0 +1,235 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 1,
+  "title": "Pyron — Load Test / Burn",
+  "uid": "pyron-burn-test",
+  "tags": ["pyron", "load-test", "burn", "webhook"],
+  "timezone": "browser",
+  "time": { "from": "now-30m", "to": "now" },
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "templating": { "list": [] },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Summary — the pitch numbers",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false
+    },
+    {
+      "type": "stat",
+      "title": "Throughput (ingress)",
+      "gridPos": { "h": 5, "w": 6, "x": 0, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(rate(nginx_ingress_controller_requests[1m]))", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "decimals": 0,
+          "color": { "mode": "fixed", "fixedColor": "#2a78d6" }
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Success rate (2xx)",
+      "gridPos": { "h": 5, "w": 6, "x": 6, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "100 * sum(rate(nginx_ingress_controller_requests{status=~\"2..\"}[5m])) / clamp_min(sum(rate(nginx_ingress_controller_requests[5m])), 1)",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 2,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "value": null, "color": "#d63a2a" },
+              { "value": 95, "color": "#fab219" },
+              { "value": 99, "color": "#0ca30c" }
+            ]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Rules compiled (total)",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "max(webhook_rules_compiled_total)", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "fixed", "fixedColor": "#7b52d1" }
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value"
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Webhook pods",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 1 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "count(count(webhook_requests_total) by (pod))", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "color": { "mode": "fixed", "fixedColor": "#2a78d6" }
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "area",
+        "textMode": "value"
+      }
+    },
+    {
+      "type": "row",
+      "title": "Ingestion — request rate & latency (ingress, aggregated)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "Requests / sec by status class",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(rate(nginx_ingress_controller_requests{status=~\"2..\"}[1m]))", "legendFormat": "2xx OK", "refId": "A" },
+        { "expr": "sum(rate(nginx_ingress_controller_requests{status=~\"4..\"}[1m]))", "legendFormat": "4xx Client", "refId": "B" },
+        { "expr": "sum(rate(nginx_ingress_controller_requests{status=~\"5..\"}[1m]))", "legendFormat": "5xx Server", "refId": "C" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "drawStyle": "line", "fillOpacity": 18, "lineWidth": 2, "showPoints": "never", "stacking": { "mode": "normal" } }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "2xx OK" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#0ca30c" } } ] },
+          { "matcher": { "id": "byName", "options": "4xx Client" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#fab219" } } ] },
+          { "matcher": { "id": "byName", "options": "5xx Server" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#d63a2a" } } ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["max", "lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Latency percentiles",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "histogram_quantile(0.50, sum(rate(nginx_ingress_controller_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p50", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum(rate(nginx_ingress_controller_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p95", "refId": "B" },
+        { "expr": "histogram_quantile(0.99, sum(rate(nginx_ingress_controller_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "p99", "refId": "C" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": { "drawStyle": "line", "fillOpacity": 8, "lineWidth": 2, "showPoints": "never" }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "p50" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#2a78d6" } } ] },
+          { "matcher": { "id": "byName", "options": "p95" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#fab219" } } ] },
+          { "matcher": { "id": "byName", "options": "p99" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#d63a2a" } } ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["max", "lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "type": "row",
+      "title": "Engine internals — queue & backlog (per-pod, agent-aggregated)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 15 },
+      "collapsed": false
+    },
+    {
+      "type": "timeseries",
+      "title": "BullMQ queue depth (sum across pods)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(webhook_bullmq_jobs{state=\"waiting\"})", "legendFormat": "waiting", "refId": "A" },
+        { "expr": "sum(webhook_bullmq_jobs{state=\"active\"})", "legendFormat": "active", "refId": "B" },
+        { "expr": "sum(webhook_bullmq_jobs{state=\"delayed\"})", "legendFormat": "delayed", "refId": "C" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "fillOpacity": 14, "lineWidth": 2, "showPoints": "never", "stacking": { "mode": "none" } }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "waiting" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#fab219" } } ] },
+          { "matcher": { "id": "byName", "options": "active" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#0ca30c" } } ] },
+          { "matcher": { "id": "byName", "options": "delayed" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#2a78d6" } } ] }
+        ]
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["max", "lastNotNull"] }, "tooltip": { "mode": "multi", "sort": "desc" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Agent backlog (sum across pods)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(webhook_agent_backlog_total)", "legendFormat": "backlog", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "fillOpacity": 18, "lineWidth": 2, "showPoints": "never" },
+          "color": { "mode": "fixed", "fixedColor": "#7b52d1" }
+        }
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["max", "lastNotNull"] }, "tooltip": { "mode": "single" } }
+    },
+    {
+      "type": "timeseries",
+      "title": "Rules compiled — rate/sec (engine output)",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "expr": "sum(rate(webhook_rules_compiled_total[1m]))", "legendFormat": "rules/sec", "refId": "A" }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "fillOpacity": 20, "lineWidth": 2, "showPoints": "never", "gradientMode": "opacity" },
+          "color": { "mode": "fixed", "fixedColor": "#0ca30c" }
+        }
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom", "calcs": ["max", "mean"] }, "tooltip": { "mode": "single" } }
+    }
+  ]
+}

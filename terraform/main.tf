@@ -52,6 +52,21 @@ resource "digitalocean_firewall" "monitoring" {
     source_addresses = ["10.1.0.0/16"]
   }
 
+  # Prometheus remote_write receiver (:9090) — the in-cluster ephemeral
+  # prometheus-agent (see pyron-webhook k8s-ephemeral/prometheus-agent.yaml)
+  # pushes per-pod webhook metrics here during the load-test burn, so the queue
+  # depth / backlog aggregate exactly across 100+ pods (a single external
+  # NodePort scrape can't). Restricted to the staging VPC (10.0.0.0/16) — the
+  # cluster nodes SNAT the agent's traffic to their VPC IP. 9090 is also the
+  # Prometheus UI, but that stays SSH-tunnel-only; this rule only admits the
+  # in-VPC agent, nothing public. Safe to keep after the burn (nothing else in
+  # the VPC talks to it); the agent itself is torn down with the ephemeral ns.
+  inbound_rule {
+    protocol         = "tcp"
+    port_range       = "9090"
+    source_addresses = ["10.0.0.0/16"]
+  }
+
   outbound_rule {
     protocol              = "tcp"
     port_range            = "all"
