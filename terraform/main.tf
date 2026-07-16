@@ -52,19 +52,21 @@ resource "digitalocean_firewall" "monitoring" {
     source_addresses = ["10.1.0.0/16"]
   }
 
-  # Prometheus remote_write receiver (:9090) — the in-cluster ephemeral
-  # prometheus-agent (see pyron-webhook k8s-ephemeral/prometheus-agent.yaml)
-  # pushes per-pod webhook metrics here during the load-test burn, so the queue
-  # depth / backlog aggregate exactly across 100+ pods (a single external
-  # NodePort scrape can't). Restricted to the staging VPC (10.0.0.0/16) — the
-  # cluster nodes SNAT the agent's traffic to their VPC IP. 9090 is also the
-  # Prometheus UI, but that stays SSH-tunnel-only; this rule only admits the
-  # in-VPC agent, nothing public. Safe to keep after the burn (nothing else in
-  # the VPC talks to it); the agent itself is torn down with the ephemeral ns.
+  # Prometheus remote_write receiver (:9090) — in-cluster metric shippers push
+  # here (the load-test prometheus-agent today; any in-cluster exporter that
+  # remote_writes going forward). This is PERMANENT observability plumbing, not
+  # tied to a single burn: the cluster→droplet metrics path needs this port open.
+  #
+  # Two source ranges: 10.0.0.0/16 is the VPC (nodes), and 10.105.0.0/16 is the
+  # DOKS POD/CNI network. DO does NOT SNAT pod→VPC egress to the node IP, so the
+  # agent's packets arrive with their POD IP (10.105.x.x) — verified: without the
+  # CNI range the receiver saw i/o timeouts (firewall dropped the pod-sourced
+  # traffic). 9090 is also the Prometheus UI, but that stays SSH-tunnel-only;
+  # these rules only admit in-cluster traffic, nothing public.
   inbound_rule {
     protocol         = "tcp"
     port_range       = "9090"
-    source_addresses = ["10.0.0.0/16"]
+    source_addresses = ["10.0.0.0/16", "10.105.0.0/16"]
   }
 
   outbound_rule {
