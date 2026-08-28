@@ -33,6 +33,12 @@ scrape_configs:
   # private IP over the shared VPC (the monitoring droplet is 10.0.0.2, the node
   # is 10.0.0.4 — same VPC pyron-vpc-staging). NodePort answers on every node;
   # 10.0.0.4 is the fixed min-pool system node, a stable target for staging.
+  #
+  # ⚠️ This job is safe ONLY while the controller runs a single replica (verified
+  # 2026-08-28: controller.replicaCount=1, one endpoint 10.105.0.117:10254). Raise
+  # replicaCount and this scrape starts sampling one random pod per interval —
+  # the exact failure the webhook hit below. When that day comes, move it to the
+  # in-cluster agent rather than fixing it here.
   - job_name: 'ingress-nginx'
     metrics_path: /metrics
     static_configs:
@@ -41,24 +47,21 @@ scrape_configs:
           instance_name: "doks-ingress"
           cluster: "pyron-doks-staging"
 
-  # ── Webhook app metrics ──────────────────────────────────────────────────
-  # DISABLED under the burn: this NodePort (30902) scrape hits ONE random pod
-  # per interval (kube-proxy load-balances the NodePort across 100+ pods), so
-  # BullMQ queue depth / backlog came out serrated and un-aggregatable. The
-  # in-cluster ephemeral prometheus-agent now discovers every webhook pod and
-  # remote_writes per-pod series here (see monitoring-stack docker-compose
-  # --web.enable-remote-write-receiver + pyron-webhook k8s-ephemeral/
-  # prometheus-agent.yaml). Running BOTH would double-count in sum(), so this
-  # single-target job stays OFF while the agent is up. Re-enable (and stop the
-  # agent) only if you ever want the low-pod-count NodePort path back.
+  # ── Webhook app metrics: RETIRED from this file ──────────────────────────
+  # There was a 'webhook-app' job here scraping NodePort 30902. It is gone for
+  # good, not parked: a NodePort scrape is load-balanced by kube-proxy across the
+  # backing pods, so it samples ONE RANDOM POD per interval. At 100+ webhook pods
+  # the BullMQ queue-depth/backlog series came out serrated and un-aggregatable.
   #
-  # - job_name: 'webhook-app'
-  #   metrics_path: /metrics
-  #   static_configs:
-  #     - targets: ['10.0.0.4:30902']
-  #       labels:
-  #         instance_name: "webhook-ephemeral"
-  #         cluster: "pyron-doks-staging"
+  # That is a property of NodePort + multiple replicas, not of the webhook, so
+  # re-enabling it at low pod counts would just re-arm the same trap. App metrics
+  # arrive by remote_write instead, from an in-cluster prometheus-agent that
+  # discovers every pod via kubernetes_sd (docker-compose sets
+  # --web.enable-remote-write-receiver for this). The agent is being promoted
+  # from burn-ephemeral to a permanent Deployment, and will carry cAdvisor and
+  # kube-state-metrics on the same path — see docs/cluster-metrics-logs-study.md.
+  #
+  # Rule of thumb going forward: no new NodePort scrape jobs in this file.
 
   # NOTE: the digitalocean-exporter was removed (dead since 2020, no DOKS
   # collector) and the old per-droplet node-exporter jobs (10.1.0.x) too — those
@@ -66,5 +69,6 @@ scrape_configs:
   #
   # Deeper app-level metrics (BullMQ queue depth, rules-compiled, per-agent) come
   # later via prom-client in the services (phase 2). The ingress already gives
-  # the request-rate/latency "graph over time". Cluster CPU/RAM: metrics-server /
-  # DO panel for now.
+  # the request-rate/latency "graph over time". Cluster CPU/RAM per pod arrives
+  # with cAdvisor + kube-state-metrics via the permanent agent (study, step 2);
+  # until then it's metrics-server / the DO panel.
