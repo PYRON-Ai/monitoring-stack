@@ -46,10 +46,21 @@ resource "digitalocean_firewall" "monitoring" {
     source_addresses = ["0.0.0.0/0", "::/0"]
   }
 
+  # Loki push endpoint (:3100) — in-cluster log shippers (the Alloy DaemonSet)
+  # push pod logs here. Same two source ranges as the 9090 rule below, for the
+  # same reason: 10.0.0.0/16 is the VPC (nodes) and 10.105.0.0/16 is the DOKS
+  # pod/CNI network, and DO does NOT SNAT pod->VPC egress to the node IP, so a
+  # pod's packets arrive with their POD IP. Verified on the live staging cluster
+  # (2026-08-28): nodes are 10.0.0.4/10.0.0.5, pods 10.105.x.
+  #
+  # This previously allowed 10.1.0.0/16 — the RETIRED prod VPC — so it admitted
+  # nothing at all: the range has no live hosts since the k8s migration. Nothing
+  # loses access in this change; it only opens the path the cluster actually
+  # uses. Like 9090, these rules admit in-cluster traffic only, nothing public.
   inbound_rule {
     protocol         = "tcp"
     port_range       = "3100"
-    source_addresses = ["10.1.0.0/16"]
+    source_addresses = ["10.0.0.0/16", "10.105.0.0/16"]
   }
 
   # Prometheus remote_write receiver (:9090) — in-cluster metric shippers push
