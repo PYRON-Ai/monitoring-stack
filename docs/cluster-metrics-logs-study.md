@@ -2,8 +2,12 @@
 
 > Status: **Study / blueprint** — no execution yet.
 > Date: 2026-08-28 · Supersedes the open items in [`cluster-metrics-plan.md`](cluster-metrics-plan.md)
-> Scope decisions taken up front: logs on **local disk, 48h–7d** · log agent as a
-> **permanent DaemonSet** · **kube-state-metrics + cAdvisor in scope**.
+> Scope decisions taken up front: logs on **local disk, 48h–7d** · a **permanent**
+> log agent · **kube-state-metrics + cAdvisor in scope**.
+>
+> ⚠️ **Superseded in one respect during implementation:** the log agent shipped as
+> a single **Deployment**, not a DaemonSet — see
+> [Correction: Deployment, not DaemonSet](#correction-deployment-not-daemonset).
 > Numbers below **verified against the live staging cluster on 2026-08-28**
 > (see [Live verification](#live-verification-2026-08-28)).
 
@@ -54,7 +58,7 @@ supports and the burn already proved:
     │  cAdvisor (kubelet) ─┼─→ prometheus-agent ──remote_write──┐
     │  ingress-nginx ──────┘    (Deployment, kubernetes_sd)     │
     │                                                            │
-    │  every pod's stdout ──→ Grafana Alloy (DaemonSet) ──push───┤
+    │  every pod's stdout ──→ Grafana Alloy (Deployment) ──push──┤
     │                                                            │
     └────────────────────────────────────────────────────────────┤
                                                                  ▼
@@ -109,7 +113,8 @@ recommendation rather than contradicting it.
 That fits, but it is not free on a `s-2vcpu-4gb` node that is already two-thirds
 consumed — worth pinning the agent and KSM to the **system** node (34% RAM,
 plenty of room) via `nodeSelector pyron.io/pool=system`, leaving the workload
-node for apps. Alloy, being a DaemonSet, necessarily runs on both.
+node for apps. (Alloy was expected to run on both nodes as a DaemonSet; it ended
+up pinned to the system node too — see the correction below.)
 
 **✅ Log volume is a non-issue at baseline — the 48h/local-disk call is right.**
 Measured over 15 minutes:
@@ -124,7 +129,7 @@ Measured over 15 minutes:
 **Total ≈ 2.4 MB/day**, so a 48h window is ~5 MB and even 7d is ~17 MB. Storage
 is genuinely irrelevant at idle. The volume concern in Part 2 stands **only for
 burn windows** — at 866 req/s the webhook's per-request logging is 3–4 orders of
-magnitude above this baseline. So: ship the DaemonSet without volume anxiety, and
+magnitude above this baseline. So: ship the collector without volume anxiety, and
 keep the level-filtering as a **burn-time** control, not a day-one blocker.
 
 Worth noting the webhook's baseline is almost entirely
@@ -193,12 +198,11 @@ on a droplet whose Prometheus has no retention tuning today.
 
 ## Part 2 — Pod logs, economically
 
-**Agent: Grafana Alloy as a DaemonSet** (the supported successor to Promtail,
-which is EOL as of Loki 3.x). One pod per node, tails
-`/var/log/pods/*`, enriches with `namespace / pod / container / node` from the
-k8s API, pushes to the droplet's Loki.
+**Agent: Grafana Alloy** (the supported successor to Promtail, which is EOL as of
+Loki 3.x). It discovers pods, tails their logs, enriches with
+`namespace / app / container / node`, and pushes to the droplet's Loki.
 
-**Why a DaemonSet and not the ephemeral pattern:** logs are most valuable for the
+**Why permanent and not the ephemeral pattern:** logs are most valuable for the
 incidents you didn't schedule. The postmortem in doks-iac (a full cluster loss)
 is exactly the case where "logs only during burns" produces nothing.
 
@@ -214,7 +218,7 @@ droplet we already pay for.
    3100 to `10.1.0.0/16` — the **dead prod VPC**. This is the pre-existing bug the
    old plan flagged and it was never fixed. It needs `10.0.0.0/16` (VPC) **and**
    `10.105.0.0/16` (pod CNI), for exactly the reason documented on the 9090 rule:
-   DO does not SNAT pod egress, so packets arrive with the pod IP. A DaemonSet
+   DO does not SNAT pod egress, so packets arrive with the pod IP. A collector
    pushing to Loki will hit precisely the same timeout that was already debugged
    once on 9090.
 
@@ -241,6 +245,41 @@ by orders of magnitude.
 **Escalation path if 7d proves too short:** switch `storage_config` to the Spaces
 bucket (the credentials and `.env` keys already exist, `SPACES_*`) — roughly
 $5/mo, no architectural change. That is a config swap, deliberately deferred.
+
+## Correction: Deployment, not DaemonSet
+
+Written into the study as a DaemonSet; shipped as a single-replica **Deployment**.
+The reason is worth recording, because the study's reasoning was wrong on a point
+of fact rather than of judgement.
+
+Alloy's `loki.source.kubernetes` component tails logs **through the Kubernetes
+API**, not off the node's filesystem. Grafana's own documentation is explicit
+that it therefore *"doesn't require a DaemonSet to collect logs, so one Alloy
+could collect logs for the whole cluster."* A DaemonSet in that arrangement runs
+N collectors that all read through the same API — paying the per-node cost with
+none of the locality benefit that justifies a DaemonSet in the first place.
+
+The DaemonSet assumption came from the Promtail model (tail `/var/log/pods/*` on
+each node, which genuinely does need a pod per node). Carrying that assumption
+across to Alloy without checking the component was the error.
+
+**The trade-off we accepted, stated plainly:**
+
+- API-based tailing costs more network and more kubelet CPU than reading files
+  locally. At six namespaces and ~2.4 MB/day this is comfortable.
+- One replica is a single point of failure. A restart is a short *gap in
+  collection*, not lost logs — Alloy resumes from its recorded position.
+
+**When to revisit:** if log volume grows enough that API tailing strains the
+kubelets, the migration is to `loki.source.file` on a DaemonSet with host mounts.
+That is a change of source component, not of architecture — the pipeline,
+allowlist, labels and destination all stay as they are.
+
+**Verified against the live cluster before merging:** the Alloy binary (v1.19.2,
+matching the chart) was run against staging with its write endpoint pointed at a
+dead local port. It discovered exactly the six allowlisted namespaces and nothing
+from `kube-system`, confirming the allowlist works and that a single instance
+sees every pod it needs to.
 
 ## What we are NOT doing (and why)
 
@@ -286,7 +325,7 @@ Each step is independently verifiable; nothing here is a big-bang.
    `webhook-app` NodePort job and its now-stale comment.
 4. **Grafana** — a "Cluster / Resources" dashboard: CPU & RAM per namespace and
    per pod, restarts, OOMKills, pending pods, HPA saturation.
-5. **doks-iac platform** — Alloy DaemonSet with the namespace allowlist and
+5. **doks-iac platform** — Alloy with the namespace allowlist and
    low-cardinality labels; push to `10.0.0.2:3100`.
 6. **Grafana** — logs panels, and wire log context onto the existing ingress and
    burn dashboards (click a latency spike → the logs for that window).
