@@ -1,0 +1,107 @@
+# Alerts for the DOKS cluster, fed by the in-cluster prometheus-agent
+# (kube-state-metrics + cAdvisor + ingress-nginx, remote_written to this server).
+#
+# Until now nothing here watched the cluster: an app could crashloop, get
+# OOMKilled, or sit Pending forever and no rule would notice — the node-level
+# rules in basic-alerts.yml only see the monitoring droplet itself.
+#
+# NOTE ON ROUTING: staging's Alertmanager uses a null receiver on purpose (see
+# alertmanager/config.yml), so these fire and are visible in the Alertmanager UI
+# and Grafana without paging anyone. Telegram is a production decision; these
+# rules are written so they can be routed there unchanged when prod gets them.
+groups:
+  - name: cluster-alerts
+    rules:
+
+      # ——— CAUGHT IN A LOOP ———
+      # A container restarting repeatedly is failing to start, not merely
+      # restarting. Rate over 15m so a single crash or a deploy doesn't fire.
+      - alert: PodCrashLooping
+        expr: increase(kube_pod_container_status_restarts_total[15m]) > 3
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "A container keeps dying."
+          description: "{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) restarted more than 3 times in 15 minutes. It is not coming up."
+
+      # ——— APPETITE EXCEEDED ———
+      # OOMKilled is its own signal: the container asked for more memory than it
+      # was allowed. Distinct from a crash — the fix is limits, not code.
+      # Uses terminated_reason (not last_terminated_reason, which this
+      # kube-state-metrics build does not expose — verified against the live
+      # endpoint; a rule on that name would have been silent forever).
+      - alert: ContainerOOMKilled
+        expr: kube_pod_container_status_terminated_reason{reason="OOMKilled"} == 1
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Killed for memory."
+          description: "{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) was OOMKilled. It wanted more than its limit allowed."
+
+      # ——— STUCK IN THE BACKOFF ———
+      # The state Kubernetes itself reports once it gives up restarting quickly.
+      # Complements the restart-rate alert above: that one catches the climb,
+      # this one catches a container that has already been parked.
+      - alert: PodInCrashLoopBackOff
+        expr: kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"} == 1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Parked in CrashLoopBackOff."
+          description: "{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) is in CrashLoopBackOff. Kubernetes has backed off restarting it."
+
+      # ——— NOWHERE TO LAND ———
+      # Pending past a few minutes means the scheduler cannot place it: no node
+      # has the room, or a volume/selector cannot be satisfied.
+      - alert: PodStuckPending
+        expr: kube_pod_status_phase{phase="Pending"} == 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "A pod cannot be placed."
+          description: "{{ $labels.namespace }}/{{ $labels.pod }} has been Pending for 10 minutes. The scheduler has nowhere to put it."
+
+      # ——— FEWER THAN PROMISED ———
+      # The deployment is running below its declared replica count — degraded
+      # capacity that a per-pod alert would miss when pods churn.
+      - alert: DeploymentReplicasMissing
+        expr: kube_deployment_status_replicas_available < kube_deployment_spec_replicas
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Running short."
+          description: "{{ $labels.namespace }}/{{ $labels.deployment }} has fewer available replicas than it asks for, and has for 10 minutes."
+
+      # ——— PRESSING THE CEILING ———
+      # Sustained use near the memory limit is the run-up to an OOMKill. Catching
+      # it here is the difference between a warning and a restart.
+      # Guarded against limit=0 (containers with no limit set), which would
+      # otherwise divide by zero.
+      - alert: ContainerMemoryNearLimit
+        expr: |
+          container_memory_working_set_bytes{container!="", container!="POD"}
+            / on(namespace, pod, container)
+            kube_pod_container_resource_limits{resource="memory"} > 0.90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Memory close to the edge."
+          description: "{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) has held above 90% of its memory limit for 10 minutes. An OOMKill is the next step."
+
+      # ——— THE CLUSTER STOPPED REPORTING ———
+      # The agent pushes by remote_write; if kube-state-metrics goes silent we
+      # lose every rule above, quietly. This is the watchdog for the watchers.
+      - alert: ClusterMetricsMissing
+        expr: absent(kube_pod_status_phase)
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "The cluster went quiet."
+          description: "No kube-state-metrics series have arrived for 10 minutes. The in-cluster agent is down, or the push path to this server is broken — cluster alerts are blind until it returns."
