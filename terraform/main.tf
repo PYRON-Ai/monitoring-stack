@@ -46,8 +46,8 @@ resource "digitalocean_firewall" "monitoring" {
     source_addresses = ["0.0.0.0/0", "::/0"]
   }
 
-  # Loki push endpoint (:3100) — in-cluster log shippers (the Alloy DaemonSet)
-  # push pod logs here. Same two source ranges as the 9090 rule below, for the
+  # Loki push endpoint (:3100) — the in-cluster log shipper (Alloy) pushes pod
+  # logs here. Same two source ranges as the 9090 rule below, for the
   # same reason: 10.0.0.0/16 is the VPC (nodes) and 10.105.0.0/16 is the DOKS
   # pod/CNI network, and DO does NOT SNAT pod->VPC egress to the node IP, so a
   # pod's packets arrive with their POD IP. Verified on the live staging cluster
