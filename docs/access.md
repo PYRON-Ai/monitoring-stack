@@ -35,12 +35,21 @@ request. Nobody is ever added or removed inside Grafana.
 When Cloudflare is unavailable — or you need admin while SSO is broken:
 
 ```bash
-ssh -L 3000:grafana:3000 <user>@<droplet-ip>
+ssh -L 3000:172.28.0.20:3000 <user>@<droplet-ip>
 # then open http://localhost:3000 and log in with the admin account
 ```
 
-`grafana` resolves inside the droplet's compose network, so the forward reaches
-the container even though it publishes no port.
+The target is the container's **address on the compose bridge**, and both
+obvious-looking alternatives fail:
+
+- `localhost:3000` — reaches the droplet's own port 3000, which nothing
+  publishes any more.
+- `grafana:3000` — `sshd` runs on the host, outside the compose network, so it
+  cannot resolve container names: *"Temporary failure in name resolution"*.
+
+`172.28.0.20` is pinned in `docker-compose.yml` precisely so this command stays
+copy-pasteable; nobody should be looking up a container IP mid-incident. If it
+ever does move, `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' <grafana-container>` on the droplet gives the current one.
 
 The admin credentials live in `MONITOR_ENV_STAGING` (`GF_SECURITY_ADMIN_USER` /
 `GF_SECURITY_ADMIN_PASSWORD`). Treat them as break-glass: not the daily login,
@@ -56,6 +65,12 @@ person.
 ---
 
 ## Setting it up (admin, once)
+
+> **Do step 3 before merging.** Removing Grafana's published port and adding the
+> tunnel land in the same change, so deploying without `TUNNEL_TOKEN` set leaves
+> cloudflared restart-looping and Grafana reachable only over the break-glass
+> forward — the old `-L 3000:localhost:3000` stops working at that moment. Get
+> the token into `MONITOR_ENV_STAGING` first, or expect that gap.
 
 ### 1. Create the tunnel
 

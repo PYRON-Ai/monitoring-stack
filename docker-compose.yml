@@ -68,15 +68,23 @@ services:
     # directly could forge that header and log in as anyone. Removing the port is
     # what makes trusting the header safe.
     #
-    # For admin access without Cloudflare, tunnel over SSH:
-    #   ssh -L 3000:grafana:3000 <user>@<droplet>   (see docs/access.md)
+    # For admin access without Cloudflare, forward to the container's address on
+    # the bridge — NOT to localhost, and not to the name "grafana". sshd runs on
+    # the host, outside the compose network, so it resolves neither: "localhost"
+    # reaches a port nothing publishes any more, and the name fails with
+    # "Temporary failure in name resolution".
+    #   ssh -L 3000:172.28.0.20:3000 <user>@<droplet>   (see docs/access.md)
     expose:
       - "3000"
     depends_on:
       - prometheus
       - alertmanager
     networks:
-      - monitoring
+      monitoring:
+        # Fixed so the break-glass SSH forward has a stable address to name.
+        # Docker hands out bridge addresses dynamically otherwise, and looking up
+        # a container IP is the last thing anyone should have to do mid-incident.
+        ipv4_address: 172.28.0.20
 
 
   # cloudflared: the only door into Grafana.
@@ -93,7 +101,21 @@ services:
     image: cloudflare/cloudflared:2024.8.3
     <<: *common-restart
     env_file: .env
-    command: tunnel --no-autoupdate run
+    # TUNNEL_TOKEN comes from the environment. Without it `tunnel run` has no
+    # tunnel to run and the container restart-loops, so fail loudly with a
+    # readable message instead: the log then says what is missing rather than
+    # repeating cloudflared's generic usage error.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        if [ -z "$${TUNNEL_TOKEN}" ]; then
+          echo "TUNNEL_TOKEN is not set — add it to MONITOR_ENV_STAGING (see docs/access.md)."
+          echo "Grafana is only reachable over the break-glass SSH forward until it is."
+          sleep 3600
+          exit 1
+        fi
+        exec cloudflared tunnel --no-autoupdate run
     networks:
       monitoring:
         # Fixed address so Grafana's auth.proxy whitelist can name it. On the
