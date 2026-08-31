@@ -37,6 +37,8 @@ services:
       - '--storage.tsdb.retention.size=20GB'
     ports:
       - "9090:9090"
+    networks:
+      - monitoring
 
   alertmanager:
     image: prom/alertmanager:v0.27.0
@@ -49,6 +51,8 @@ services:
       - '--config.file=/etc/alertmanager/config.yml'
     ports:
       - "9093:9093"
+    networks:
+      - monitoring
 
   grafana:
     image: grafana/grafana:10.0.5
@@ -57,11 +61,47 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
-    ports:
-      - "3000:3000"
+    # NO published port. Grafana is reachable ONLY from inside this compose
+    # network, and the only thing that reaches it from outside is the cloudflared
+    # container below. This is not cosmetic: auth.proxy (see .env.example) makes
+    # Grafana trust an identity header, so anything able to talk to :3000
+    # directly could forge that header and log in as anyone. Removing the port is
+    # what makes trusting the header safe.
+    #
+    # For admin access without Cloudflare, tunnel over SSH:
+    #   ssh -L 3000:grafana:3000 <user>@<droplet>   (see docs/access.md)
+    expose:
+      - "3000"
     depends_on:
       - prometheus
       - alertmanager
+    networks:
+      - monitoring
+
+
+  # cloudflared: the only door into Grafana.
+  #
+  # It makes an OUTBOUND connection to Cloudflare and serves the tunnel over it,
+  # so the droplet needs no inbound port open for this to work — there is nothing
+  # to port-scan. Cloudflare Access sits in front and authenticates every request
+  # (corporate SSO + MFA) before it is ever forwarded here, then passes the user's
+  # email in a header that Grafana consumes to provision the account.
+  #
+  # Adding or removing a developer is a change to the Access policy — no Grafana
+  # user administration, no shared password, no binary to rebuild and redistribute.
+  cloudflared:
+    image: cloudflare/cloudflared:2024.8.3
+    <<: *common-restart
+    env_file: .env
+    command: tunnel --no-autoupdate run
+    networks:
+      monitoring:
+        # Fixed address so Grafana's auth.proxy whitelist can name it. On the
+        # default bridge network container IPs move between restarts, which would
+        # make the whitelist either wrong or uselessly wide.
+        ipv4_address: 172.28.0.10
+    depends_on:
+      - grafana
 
   node-exporter:
     image: prom/node-exporter:v1.7.0
@@ -76,6 +116,8 @@ services:
       - '--path.procfs=/host/proc'
       - '--path.sysfs=/host/sys'
       - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($|/)'
+    networks:
+      - monitoring
 
   loki:
     image: grafana/loki:2.9.0
@@ -85,7 +127,8 @@ services:
       - loki_data:/loki
     ports:
       - "3100:3100"
-
+    networks:
+      - monitoring
 
   promtail:
     image: grafana/promtail:2.9.0
@@ -99,6 +142,8 @@ services:
     command: -config.file=/etc/promtail/promtail-config.yaml
     depends_on:
       - loki
+    networks:
+      - monitoring
 
 volumes:
   prometheus_data:
@@ -106,3 +151,15 @@ volumes:
   grafana_data:
   loki_data:
   promtail_positions:
+
+# One explicit network with a fixed subnet, so cloudflared can hold a stable
+# address for Grafana's auth.proxy whitelist. Compose's default network assigns
+# addresses dynamically, which would leave the whitelist either stale after a
+# restart or widened to the whole subnet — and a wide whitelist on auth.proxy
+# means any container here could forge the identity header.
+networks:
+  monitoring:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
