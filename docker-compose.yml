@@ -101,21 +101,12 @@ services:
     image: cloudflare/cloudflared:2024.8.3
     <<: *common-restart
     env_file: .env
-    # TUNNEL_TOKEN comes from the environment. Without it `tunnel run` has no
-    # tunnel to run and the container restart-loops, so fail loudly with a
-    # readable message instead: the log then says what is missing rather than
-    # repeating cloudflared's generic usage error.
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        if [ -z "$${TUNNEL_TOKEN}" ]; then
-          echo "TUNNEL_TOKEN is not set — add it to MONITOR_ENV_STAGING (see docs/access.md)."
-          echo "Grafana is only reachable over the break-glass SSH forward until it is."
-          sleep 3600
-          exit 1
-        fi
-        exec cloudflared tunnel --no-autoupdate run
+    # Reads TUNNEL_TOKEN from the environment. If it is unset the container
+    # restart-loops on cloudflared's own usage error ("requires the ID or name of
+    # the tunnel") — the deploy pipeline checks for the variable up front and says
+    # so plainly, because this image cannot: it is distroless, with no shell to
+    # run a guard script in.
+    command: tunnel --no-autoupdate run
     networks:
       monitoring:
         # Fixed address so Grafana's auth.proxy whitelist can name it. On the

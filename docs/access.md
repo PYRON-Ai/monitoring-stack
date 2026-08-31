@@ -132,6 +132,10 @@ Push to `stage`. The pipeline writes the new `.env` and restarts the stack.
 # cloudflared connected to Cloudflare's edge?
 docker compose logs cloudflared | grep -i "registered tunnel connection"
 
+# restart-looping instead? almost always a missing/invalid TUNNEL_TOKEN. The
+# image is distroless and cannot explain itself, so the deploy job warns about
+# the missing variable — check the pipeline log for that warning.
+
 # Grafana must NOT be reachable from outside
 curl -sS --max-time 5 http://<droplet-ip>:3000   # expect: connection refused
 ```

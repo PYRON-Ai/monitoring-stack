@@ -212,6 +212,21 @@ jobs:
           chmod 600 ${DEPLOY_PATH}/.env
           EOF
 
+      # Warn about a missing tunnel token here, where there is a shell to check
+      # in. The cloudflared image is distroless, so it cannot self-diagnose: with
+      # no TUNNEL_TOKEN it just restart-loops on a generic usage error that never
+      # mentions the variable. A warning (not a failure) — the rest of the stack
+      # is fine without it, and Grafana stays reachable over the break-glass
+      # forward.
+      - name: Check the Cloudflare tunnel token is present
+        if: env.MONITOR_ENV != ''
+        run: |
+          if echo "${MONITOR_ENV}" | grep -qE '^[[:space:]]*TUNNEL_TOKEN[[:space:]]*=[[:space:]]*[^[:space:]]'; then
+            echo "TUNNEL_TOKEN present — cloudflared can connect."
+          else
+            echo "::warning::TUNNEL_TOKEN is missing or empty in MONITOR_ENV_STAGING. cloudflared will restart-loop and Grafana will be reachable only over the break-glass SSH forward. See docs/access.md."
+          fi
+
       - name: Bootstrap Loki volumes (directories fix)
         run: |
           ssh $DEPLOY_USER@$DEPLOY_HOST <<EOF
