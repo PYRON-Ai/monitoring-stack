@@ -722,7 +722,7 @@
           "instant": true
         }
       ],
-      "description": "Share of ingress requests returning 5xx. The arc tops out at 10%, not 100%: an error rate lives in the low single digits, so a 0-100% scale would render every real value as an invisible sliver and paint the rest of the dial red. Orange at 1%, red at 5%. Reads 0 rather than NaN when there is no traffic.",
+      "description": "Share of ingress requests returning 5xx. The arc tops out at 10%, not 100%: an error rate lives in the low single digits, so a 0-100% scale would render every real value as an invisible sliver and paint the rest of the dial red. Orange at 1%, red at 5%. Reads 0 rather than NaN when there is no traffic. Grafana flags rate() here because the metric name lacks a _total suffix; ingress-nginx simply does not follow that convention. Prometheus reports it as type=counter, so rate() is correct \u2014 the warning is a naming heuristic, not a problem.",
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
@@ -868,7 +868,7 @@
           "legendFormat": "{{service}}"
         }
       ],
-      "description": "Ingress throughput per backing service. Flat at zero across the board usually means no traffic, not an outage \u2014 check against the status row.",
+      "description": "Ingress throughput per backing service. Flat at zero across the board usually means no traffic, not an outage \u2014 check against the status row. Grafana flags rate() here because the metric name lacks a _total suffix; ingress-nginx simply does not follow that convention. Prometheus reports it as type=counter, so rate() is correct \u2014 the warning is a naming heuristic, not a problem.",
       "fieldConfig": {
         "defaults": {
           "unit": "reqps",
