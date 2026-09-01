@@ -722,13 +722,13 @@
           "instant": true
         }
       ],
-      "description": "Share of ingress requests returning 5xx. clamp_min keeps this at 0 rather than NaN when there is no traffic.",
+      "description": "Share of ingress requests returning 5xx. The arc tops out at 10%, not 100%: an error rate lives in the low single digits, so a 0-100% scale would render every real value as an invisible sliver and paint the rest of the dial red. Orange at 1%, red at 5%. Reads 0 rather than NaN when there is no traffic.",
       "fieldConfig": {
         "defaults": {
           "unit": "percentunit",
           "min": 0,
-          "max": 1,
-          "decimals": 1,
+          "max": 0.1,
+          "decimals": 2,
           "color": {
             "mode": "thresholds"
           },
@@ -852,10 +852,10 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "h": 8,
+        "h": 11,
         "w": 12,
         "x": 0,
-        "y": 12
+        "y": 11
       },
       "targets": [
         {
@@ -929,10 +929,10 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "h": 8,
+        "h": 11,
         "w": 12,
         "x": 12,
-        "y": 12
+        "y": 11
       },
       "targets": [
         {
@@ -1006,10 +1006,10 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "h": 8,
+        "h": 11,
         "w": 12,
         "x": 0,
-        "y": 20
+        "y": 22
       },
       "targets": [
         {
@@ -1083,10 +1083,10 @@
         "uid": "prometheus"
       },
       "gridPos": {
-        "h": 8,
+        "h": 11,
         "w": 12,
         "x": 12,
-        "y": 20
+        "y": 22
       },
       "targets": [
         {
