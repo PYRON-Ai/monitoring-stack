@@ -15,3 +15,17 @@ datasources:
     url: http://alertmanager:9093
     jsonData:
       implementation: prometheus
+
+  # Loki: pod logs from the cluster (shipped by the in-cluster Alloy) plus the
+  # droplet's own container logs (promtail). Provisioned so dashboards can put
+  # logs next to the metrics that led you to them — the "why" under the "what".
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      # Cap the range a single query may scan. Loki is on local disk with 48h
+      # retention here; an unbounded query over a burn's worth of logs is how a
+      # dashboard panel stalls the whole datasource.
+      maxLines: 1000
