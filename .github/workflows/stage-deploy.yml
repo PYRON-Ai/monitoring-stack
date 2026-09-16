@@ -266,14 +266,31 @@ jobs:
           docker compose pull
           docker compose up -d --remove-orphans
 
-          # Prometheus doesn't hot-reload the config on its own. With
-          # --web.enable-lifecycle (set in the compose) we can POST /-/reload so
-          # config changes (new scrape jobs, etc.) take effect WITHOUT a restart
-          # — no scrape gap. Give it a moment to be up, then reload; retry once.
+          # Prometheus config: recreate the container when the file changed,
+          # otherwise hot-reload.
+          #
+          # POST /-/reload alone is NOT enough here, and it fails silently. The
+          # config is a SINGLE-FILE bind mount, and rsync replaces files rather
+          # than editing them in place — so the new file gets a new inode while
+          # the container's mount stays bound to the old one. The container keeps
+          # reading the previous config, /-/reload dutifully re-reads that same
+          # stale file, and returns 200. Everything looks fine and nothing
+          # changed; a retired scrape job kept firing InstanceDown for hours that
+          # way.
+          #
+          # Comparing the file the container sees against the one on disk detects
+          # exactly that case. A recreate costs a few seconds of scrape gap and is
+          # the only thing that re-binds the mount; the reload path stays for the
+          # common case where nothing changed.
           sleep 5
-          curl -fsS -X POST http://localhost:9090/-/reload && echo "prometheus config reloaded" \
-            || { sleep 5; curl -fsS -X POST http://localhost:9090/-/reload && echo "prometheus reloaded (retry)"; } \
-            || echo "WARN: prometheus reload failed (config still applied on next restart)"
+          if docker compose exec -T prometheus cat /etc/prometheus/prometheus.yaml 2>/dev/null \
+               | diff -q - config/prometheus.yaml >/dev/null 2>&1; then
+            curl -fsS -X POST http://localhost:9090/-/reload && echo "prometheus config reloaded" \
+              || echo "WARN: prometheus reload failed (config applies on next restart)"
+          else
+            echo "prometheus config changed on disk — recreating so the mount picks it up"
+            docker compose up -d --force-recreate prometheus
+          fi
           EOF
 
       - name: Stack report final
