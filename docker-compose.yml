@@ -61,12 +61,14 @@ services:
     volumes:
       - grafana_data:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
-    # NO published port. Grafana is reachable ONLY from inside this compose
-    # network, and the only thing that reaches it from outside is the cloudflared
-    # container below. This is not cosmetic: auth.proxy (see .env.example) makes
-    # Grafana trust an identity header, so anything able to talk to :3000
-    # directly could forge that header and log in as anyone. Removing the port is
-    # what makes trusting the header safe.
+    # NO published port. Grafana is reachable only over the compose bridge, which
+    # keeps it off the public internet: the droplet exposes nothing on 3000.
+    #
+    # cloudflared is NOT a service here — it runs as a systemd unit on the host
+    # (`systemctl status cloudflared`), pointed at 172.28.0.20:3000 below. Running
+    # it outside the stack means the tunnel survives a `docker compose down`,
+    # which is exactly when you most want to reach Grafana, and keeps the tunnel
+    # token out of the .env.
     #
     # For admin access without Cloudflare, forward to the container's address on
     # the bridge — NOT to localhost, and not to the name "grafana". sshd runs on
@@ -86,44 +88,6 @@ services:
         # a container IP is the last thing anyone should have to do mid-incident.
         ipv4_address: 172.28.0.20
 
-
-  # cloudflared: the only door into Grafana.
-  #
-  # It makes an OUTBOUND connection to Cloudflare and serves the tunnel over it,
-  # so the droplet needs no inbound port open for this to work — there is nothing
-  # to port-scan. Cloudflare Access sits in front and authenticates every request
-  # (corporate SSO + MFA) before it is ever forwarded here, then passes the user's
-  # email in a header that Grafana consumes to provision the account.
-  #
-  # Adding or removing a developer is a change to the Access policy — no Grafana
-  # user administration, no shared password, no binary to rebuild and redistribute.
-  cloudflared:
-    image: cloudflare/cloudflared:2024.8.3
-    <<: *common-restart
-    env_file: .env
-    # TUNNEL_TOKEN comes from the environment. Without it `tunnel run` has no
-    # tunnel to run and the container restart-loops, so fail loudly with a
-    # readable message instead: the log then says what is missing rather than
-    # repeating cloudflared's generic usage error.
-    entrypoint:
-      - /bin/sh
-      - -c
-      - |
-        if [ -z "$${TUNNEL_TOKEN}" ]; then
-          echo "TUNNEL_TOKEN is not set — add it to MONITOR_ENV_STAGING (see docs/access.md)."
-          echo "Grafana is only reachable over the break-glass SSH forward until it is."
-          sleep 3600
-          exit 1
-        fi
-        exec cloudflared tunnel --no-autoupdate run
-    networks:
-      monitoring:
-        # Fixed address so Grafana's auth.proxy whitelist can name it. On the
-        # default bridge network container IPs move between restarts, which would
-        # make the whitelist either wrong or uselessly wide.
-        ipv4_address: 172.28.0.10
-    depends_on:
-      - grafana
 
   node-exporter:
     image: prom/node-exporter:v1.7.0
@@ -174,11 +138,11 @@ volumes:
   loki_data:
   promtail_positions:
 
-# One explicit network with a fixed subnet, so cloudflared can hold a stable
-# address for Grafana's auth.proxy whitelist. Compose's default network assigns
-# addresses dynamically, which would leave the whitelist either stale after a
-# restart or widened to the whole subnet — and a wide whitelist on auth.proxy
-# means any container here could forge the identity header.
+# One explicit network with a fixed subnet so Grafana can hold a stable address
+# (172.28.0.20). Both things that reach it from outside the stack name that
+# address directly — the host's cloudflared unit and the break-glass SSH forward
+# — and Compose's default network reassigns container addresses on restart,
+# which would break both without warning.
 networks:
   monitoring:
     driver: bridge

@@ -204,6 +204,27 @@ jobs:
           rsync -avzh --delete --exclude '.git' --exclude '.env' ./ \
             $DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH
 
+      # The secret is written to the droplet verbatim, so a malformed one lands
+      # silently and the stack starts on defaults. That is not hypothetical: this
+      # secret held the literal string "123123" for weeks, so Grafana ran with no
+      # admin configuration at all and its password existed only inside the
+      # container's database — one `docker compose down -v` from being lost.
+      #
+      # A warning, not a failure: an incomplete .env still deploys a working
+      # stack, and blocking the deploy would be worse than flagging it.
+      - name: Sanity-check the environment secret
+        if: env.MONITOR_ENV != ''
+        run: |
+          missing=""
+          for key in GF_SECURITY_ADMIN_USER GF_SECURITY_ADMIN_PASSWORD; do
+            echo "${MONITOR_ENV}" | grep -qE "^[[:space:]]*${key}[[:space:]]*=[[:space:]]*[^[:space:]]" || missing="$missing $key"
+          done
+          if [ -n "$missing" ]; then
+            echo "::warning::MONITOR_ENV_STAGING is missing:$missing — Grafana will start on defaults and its credentials will live only in the container volume. See .env.example."
+          else
+            echo "Environment secret carries the expected Grafana keys."
+          fi
+
       - name: Push environment
         if: env.MONITOR_ENV != ''
         run: |
