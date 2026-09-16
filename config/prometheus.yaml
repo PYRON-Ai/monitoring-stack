@@ -25,27 +25,21 @@ scrape_configs:
         labels:
           instance_name: "monitor-server"
 
-  # ── DOKS cluster: ingress-nginx metrics ──────────────────────────────────
-  # The ingress controller sees ALL app traffic, so its metrics give request
-  # rate, latency (p50/p95/p99) and status codes PER service — WITHOUT
-  # instrumenting the apps. Enabled in doks-iac (controller.metrics.enabled=true)
-  # and exposed as NodePort 30254. We scrape it at the cluster's system node
-  # private IP over the shared VPC (the monitoring droplet is 10.0.0.2, the node
-  # is 10.0.0.4 — same VPC pyron-vpc-staging). NodePort answers on every node;
-  # 10.0.0.4 is the fixed min-pool system node, a stable target for staging.
+  # ── DOKS cluster metrics: RETIRED from this file ─────────────────────────
+  # An 'ingress-nginx' job used to scrape NodePort 30254 at the cluster's system
+  # node (10.0.0.4) over the VPC. It is gone, for the same reason the webhook job
+  # before it is gone: a NodePort scrape is a single static target pointed at one
+  # node, so it breaks the moment that node is replaced — which is exactly what
+  # happened. It sat DOWN for weeks, firing InstanceDown continuously, while the
+  # ingress itself was perfectly healthy the whole time.
   #
-  # ⚠️ This job is safe ONLY while the controller runs a single replica (verified
-  # 2026-08-28: controller.replicaCount=1, one endpoint 10.105.0.117:10254). Raise
-  # replicaCount and this scrape starts sampling one random pod per interval —
-  # the exact failure the webhook hit below. When that day comes, move it to the
-  # in-cluster agent rather than fixing it here.
-  - job_name: 'ingress-nginx'
-    metrics_path: /metrics
-    static_configs:
-      - targets: ['10.0.0.4:30254']
-        labels:
-          instance_name: "doks-ingress"
-          cluster: "pyron-doks-staging"
+  # Ingress metrics arrive by remote_write instead, from the in-cluster agent
+  # that discovers the controller through kubernetes_sd (verified: the series
+  # carry a POD address, 10.105.x:10254, not the NodePort). Nothing was lost by
+  # removing this job — it had contributed nothing since the node changed.
+  #
+  # The rule stands: no NodePort scrape jobs in this file. Anything in the
+  # cluster is collected by the agent there and pushed here.
 
   # ── Webhook app metrics: RETIRED from this file ──────────────────────────
   # There was a 'webhook-app' job here scraping NodePort 30902. It is gone for
