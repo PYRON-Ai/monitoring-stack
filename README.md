@@ -283,8 +283,15 @@ systemctl status cloudflared
   If login still fails afterwards with *"too many consecutive incorrect login
   attempts"*, the block is stored in Grafana's database and a restart will not
   clear it — delete from the `login_attempt` table.
-- **Avoid `docker compose down --volumes`** unless you mean to lose metric
-  history, log history and every Grafana setting made through the UI.
+- **Data lives in `./data` on the droplet**, as bind mounts rather than named
+  volumes. `docker compose down --volumes` therefore cannot delete it — Docker
+  only removes volumes it owns. Backing up the stack means copying that one
+  directory; `data/grafana/grafana.db` is the part that is not reproducible from
+  this repo, since it holds users, the admin password and anything changed
+  through the UI.
+- **There is no backup yet.** Nothing copies `./data` anywhere off the droplet,
+  so a lost droplet is still a lost history. The bind mount removes the easy
+  accident, not the single point of failure.
 
 ## Docs
 
