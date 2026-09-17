@@ -134,6 +134,20 @@ Prometheus `:9090`, Loki `:3100` and Alertmanager `:9093` are reachable normally
 
 ## Deployment
 
+> **Staging only.** There is no production pipeline. The monitoring stack was
+> born in production — it was the v1 Pyron stack — and was later rebuilt around
+> staging and the Kubernetes migration. What survives from that era is
+> `.github/workflows/prod-deploy.yml.old`, which exists **only on `main`** (76+
+> commits behind `stage`) and whose name is misleading: it is a copy of the
+> staging workflow, triggered by pushes to `stage`, wired to `*_STAGING` secrets,
+> and still titled "Stage Deploy" internally. Renaming it would redeploy staging,
+> not deploy production. `terraform/prod.tfvars` is empty for the same reason.
+>
+> Production monitoring goes up when the production platform does. When that
+> happens, the pattern worth copying is in `pyron-doks-iac`: a manual-dispatch
+> `deploy-prod` with approval gates and a `prod-ci` that comments the plan on the
+> PR — not this file.
+
 Push to `stage` runs `.github/workflows/stage-deploy.yml`:
 
 1. **infra** — `terraform apply` for the droplet and firewall
