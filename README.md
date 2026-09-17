@@ -224,6 +224,17 @@ rollback. For a team this size the simpler order is fine here too — but the
 choice is really about what you want `main` to *mean*, and how much it costs to
 be wrong.
 
+One caveat, since it is easy to over-read the split above: regulated shops often
+apply the strict ordering to *everything* — apps, infra, roles, the lot — and
+they are not being careless about the trade. Uniformity is itself the goal there,
+because the question being answered is "can you show an auditor that every change
+went through the same door?", and each per-type exception is one more thing to
+justify. They can also afford it: there is a release function, tooling that owns
+the calendar, people whose job is to run it, so the friction is absorbed by
+structure rather than landing on whoever was writing code. And the cost of a bad
+deploy is a regulatory incident, not a rollback. Rigour scales with the cost of
+being wrong, not with principle.
+
 What has to exist before any of that is useful:
 
 - `terraform/prod.tfvars` — currently empty
