@@ -29,9 +29,9 @@ The collection side lives in [`pyron-doks-iac`](https://github.com/PYRON-Ai/pyro
 
 | Service | Port | Role |
 |---|---|---|
-| **Prometheus** | 9090 | Scrapes the droplet, and **receives** cluster metrics by remote_write. TSDB bounded to 15d / 20GB. |
+| **Prometheus** | 9090 | Scrapes the droplet, and **receives** cluster metrics by remote_write. TSDB bounded to 30d / 20GB. |
 | **Grafana** | *(none)* | Dashboards. Deliberately publishes no host port — see [Access](#access). |
-| **Loki** | 3100 | Log store. Local filesystem, 48h retention. |
+| **Loki** | 3100 | Log store. Local filesystem, 7d retention. |
 | **Alertmanager** | 9093 | Alert routing. Staging uses a **null receiver** on purpose: alerts fire and are visible, but page nobody. |
 | **promtail** | — | Ships the droplet's own container logs to Loki. |
 | **node-exporter** | 9100 | Host metrics for the droplet. |
@@ -283,8 +283,15 @@ systemctl status cloudflared
   If login still fails afterwards with *"too many consecutive incorrect login
   attempts"*, the block is stored in Grafana's database and a restart will not
   clear it — delete from the `login_attempt` table.
-- **Avoid `docker compose down --volumes`** unless you mean to lose metric
-  history, log history and every Grafana setting made through the UI.
+- **Data lives in `./data` on the droplet**, as bind mounts rather than named
+  volumes. `docker compose down --volumes` therefore cannot delete it — Docker
+  only removes volumes it owns. Backing up the stack means copying that one
+  directory; `data/grafana/grafana.db` is the part that is not reproducible from
+  this repo, since it holds users, the admin password and anything changed
+  through the UI.
+- **There is no backup yet.** Nothing copies `./data` anywhere off the droplet,
+  so a lost droplet is still a lost history. The bind mount removes the easy
+  accident, not the single point of failure.
 
 ## Docs
 

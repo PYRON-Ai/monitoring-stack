@@ -201,7 +201,10 @@ jobs:
       - name: Sync stack (idempotente, rápido, cirúrgico)
         run: |
           set -e
-          rsync -avzh --delete --exclude '.git' --exclude '.env' ./ \
+          # --exclude 'data' is load-bearing: ./data holds the stack's databases as
+          # bind mounts, and --delete would wipe them on every deploy because the
+          # directory does not exist in the repo.
+          rsync -avzh --delete --exclude '.git' --exclude '.env' --exclude 'data' ./ \
             $DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH
 
       # The secret is written to the droplet verbatim, so a malformed one lands
@@ -233,30 +236,31 @@ jobs:
           chmod 600 ${DEPLOY_PATH}/.env
           EOF
 
-      - name: Bootstrap Loki volumes (directories fix)
+      # Bind-mounted data directories must exist AND be owned by the uid each
+      # image runs as — a bind mount is created root-owned, and the container
+      # then cannot write to it. Named volumes handled this automatically; this
+      # is the cost of not having a `down --volumes` that can delete the data.
+      - name: Prepare data directories
         run: |
           ssh $DEPLOY_USER@$DEPLOY_HOST <<EOF
-            set -eux
+            set -eu
             cd $DEPLOY_PATH
 
-            # Garante que os volumes existem
-            docker volume create loki_data || true
-            docker volume create loki_wal || true
+            # uid:gid per image — verified against the running containers:
+            #   prometheus   65534:65534 (nobody)
+            #   grafana        472:0     (grafana:root)
+            #   loki         10001:10001
+            #   alertmanager 65534:65534 (nobody)
+            #   promtail         0:0     (root)
+            mkdir -p data/prometheus data/grafana data/loki data/alertmanager data/promtail
+            chown -R 65534:65534 data/prometheus data/alertmanager
+            chown -R 472:0       data/grafana
+            chown -R 10001:10001 data/loki
+            chown -R 0:0         data/promtail
+            chmod 750 data
 
-            echo "📦 Preparing Loki directory structure..."
-
-            docker run --rm -v loki_data:/loki alpine sh -c "\
-              mkdir -p /loki && \
-              mkdir -p /loki/index /loki/cache /loki/chunks /loki/compactor /loki/boltdb-shipper-compactor && \
-              chown -R 10001:10001 /loki \
-            "
-
-            docker run --rm -v loki_wal:/wal alpine sh -c "\
-              mkdir -p /wal && \
-              chown -R 10001:10001 /wal \
-            "
-
-            echo "📁 Loki volume bootstrap completed."
+            echo "data directories ready:"
+            ls -ld data/*
           EOF
 
       - name: Deploy + Restart Stack

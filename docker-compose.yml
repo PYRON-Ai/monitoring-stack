@@ -9,7 +9,7 @@ services:
     volumes:
       - ./config/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
       - ./config/rules:/etc/prometheus/rules:ro
-      - prometheus_data:/prometheus
+      - ./data/prometheus:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yaml'
       # Enable the lifecycle API so the pipeline can POST /-/reload to pick up
@@ -26,14 +26,16 @@ services:
       # next — see docs/cluster-metrics-logs-study.md). Storage, dashboards and
       # alerting stay OUTSIDE the cluster, which is the whole point.
       - '--web.enable-remote-write-receiver'
-      # Bound the TSDB. Retention is time-based by default (15d) with NO size
-      # cap, so growth is driven by series count — and cAdvisor is about to add
-      # per-container series that scale with pod count (a burn hits 100+ pods).
-      # This droplet is 80GB shared with Loki, Grafana and the OS, so give the
-      # TSDB an explicit ceiling: whichever limit is reached first wins, and the
-      # disk cannot fill silently. Raise it deliberately if we ever need a longer
-      # window; the DiskAlmostFull alert is the backstop, not the plan.
-      - '--storage.tsdb.retention.time=15d'
+      # Bound the TSDB on BOTH axes — whichever limit is hit first wins, so the
+      # disk cannot fill silently no matter which way growth comes.
+      #
+      # 30d of history at the measured rate costs ~1.8GB: the stack writes
+      # ~59 MB/day at ~10.5k active series (measured 2026-09-17), and the droplet
+      # has ~70GB free. Time is the binding limit in normal operation, by a wide
+      # margin — the size cap exists for the abnormal case. A burn pushing
+      # cardinality 10x would reach ~18GB over the same window, which is why the
+      # ceiling stays where it is rather than scaling up with the window.
+      - '--storage.tsdb.retention.time=30d'
       - '--storage.tsdb.retention.size=20GB'
     ports:
       - "9090:9090"
@@ -46,7 +48,7 @@ services:
     env_file: .env
     volumes:
       - ./alertmanager/config.yml:/etc/alertmanager/config.yml:ro
-      - alertmanager_data:/alertmanager
+      - ./data/alertmanager:/alertmanager
     command:
       - '--config.file=/etc/alertmanager/config.yml'
     ports:
@@ -59,7 +61,7 @@ services:
     <<: *common-restart
     env_file: .env
     volumes:
-      - grafana_data:/var/lib/grafana
+      - ./data/grafana:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
     # NO published port. Grafana is reachable only over the compose bridge, which
     # keeps it off the public internet: the droplet exposes nothing on 3000.
@@ -110,7 +112,7 @@ services:
     restart: unless-stopped
     volumes:
       - ./config/loki-config.yaml:/etc/loki/loki-config.yaml:ro
-      - loki_data:/loki
+      - ./data/loki:/loki
     ports:
       - "3100:3100"
     networks:
@@ -121,7 +123,7 @@ services:
     <<: *common-restart
     volumes:
       - ./config/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
-      - promtail_positions:/var/lib/promtail
+      - ./data/promtail:/var/lib/promtail
       - /var/log:/var/log:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock
@@ -131,12 +133,19 @@ services:
     networks:
       - monitoring
 
-volumes:
-  prometheus_data:
-  alertmanager_data:
-  grafana_data:
-  loki_data:
-  promtail_positions:
+# Data lives in ./data on the droplet, as BIND MOUNTS rather than named volumes.
+#
+# The reason is blunt: `docker compose down --volumes` deletes named volumes and
+# does not touch bind mounts. With named volumes a single flag — one someone
+# reaches for when a container misbehaves — silently destroyed metric history,
+# log history, and every Grafana user and setting made through the UI. The only
+# defence was a line in the README asking people to be careful.
+#
+# The tradeoff is that directory permissions become ours to get right: each image
+# runs as a different user (prometheus 65534, grafana 472, loki 10001), and a
+# bind mount is created root-owned, so the container cannot write to it. The
+# deploy pipeline creates each directory with the right owner before starting the
+# stack; see the "Prepare data directories" step in stage-deploy.yml.
 
 # One explicit network with a fixed subnet so Grafana can hold a stable address
 # (172.28.0.20). Both things that reach it from outside the stack name that
