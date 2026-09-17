@@ -200,8 +200,29 @@ reality.
 It costs more machinery — the deploy has to run from somewhere other than `main`,
 and a failed deploy leaves a branch needing a decision. Worth it when an external
 system (ServiceNow and the like) owns the window and the merge is the audit
-record that the change landed. For a team this size the simpler order is the
-right trade, but the choice is really about what you want `main` to *mean*.
+record that the change landed.
+
+**It also suits infrastructure better than applications**, for two reasons that
+do not apply equally:
+
+- **Rollback cost.** Reverting an app is swapping back to an image that still
+  exists — seconds, and the state returns to what it was. Reverting infrastructure
+  is a *new apply* that can fail for reasons the first one did not: a destroyed
+  resource does not come back with `git revert`. The doks postmortem is the
+  example — a cluster was destroyed and the recreate then failed on an invalid
+  version slug, leaving the environment with nothing. Where rollback is cheap,
+  merging early costs little; where it is expensive, you want `main` to record
+  only what survived.
+- **Frequency.** Apps deploy many times a day, and deploy-then-merge turns into
+  standing friction: branches pending, merges queued, `main` permanently behind
+  what is running. Infrastructure deploys rarely, so the ceremony per event is
+  diluted.
+
+So the trade is not one-size: infra repos can afford the stricter ordering and
+benefit most from it, while app repos usually want merge-first and cheap
+rollback. For a team this size the simpler order is fine here too — but the
+choice is really about what you want `main` to *mean*, and how much it costs to
+be wrong.
 
 What has to exist before any of that is useful:
 
