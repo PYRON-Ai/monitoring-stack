@@ -81,6 +81,15 @@ root-only file instead of passing through the deploy pipeline.
 Cloudflare dashboard → **Zero Trust → Networks → Tunnels → Create a tunnel**
 (type: *Cloudflared*). Copy the token it shows; treat it like a password.
 
+**Lost the token later?** You do not need to recreate the tunnel. Open the tunnel
+→ **Configure**, and the install command shown there contains the token (it is
+the long string after `--token`). Same value, retrievable any time — which is
+also why access to the Cloudflare dashboard is itself a credential worth
+guarding.
+
+On the droplet the token is already on disk at `/etc/cloudflared/token` (0600,
+root-only), so `cat` it there if you have SSH but not the dashboard.
+
 ### 2. Install it on the droplet
 
 Cloudflare's dashboard gives you the install command. What matters is where the
@@ -109,18 +118,67 @@ address on the compose bridge, which the host can route to.
 
 ### 4. Protect it with Access
 
-Zero Trust → **Access → Applications → Add an application** (Self-hosted), on the
-hostname from step 3. Add a policy:
+**Until this step is done the tunnel is a public URL.** The hostname resolves for
+anyone on the internet and only Grafana's own login stands in the way — which is
+how staging sat exposed for a while. Access is what makes the tunnel safe; the
+tunnel itself is just a door.
 
-- Action: **Allow**
-- Rule: *Emails ending in* `@yourcompany.com`, or an explicit email list — tighter,
-  and worth it for a small team.
+Zero Trust → **Access → Applications → Add an application → Self-hosted**.
 
-Require MFA in your identity provider or in the Access policy itself.
+**4a. Basic information**
 
-Without this step the tunnel is a **public URL**: the hostname resolves for
-anyone on the internet, and only Grafana's own login stands in the way. Access is
-what makes the tunnel safe, not the tunnel itself.
+| Field | Value |
+|---|---|
+| Application name | `Pyron Monitoring (staging)` |
+| Session duration | `24 hours` |
+| Subdomain / Domain | `monitoring-stage` / `pyron-ai.com` |
+| Path | *(leave empty — protects everything)* |
+
+**4b. Authentication** — the step that is easy to miss
+
+This is a **separate tab** in the same form, and the form lets you save without
+touching it. Skipping it produces an application with no login method at all:
+the sign-in page appears, accepts an email, and then nothing happens — no PIN,
+no error.
+
+Set **either**:
+- **Accept all available identity providers** → on, or
+- select **One-time PIN** explicitly in the provider list.
+
+If One-time PIN is not in that list, it is not enabled on the account: **Settings
+→ Authentication → Login methods → Add new → One-time PIN**. It is built in and
+needs no configuration.
+
+⚠️ Leave **"Authenticate with Cloudflare One Client"** OFF. Turning it on fails
+the save with:
+
+```
+access.api.error.invalid_request: allow_authenticate_via_warp cannot be set until
+a Cloudflare One Client Authentication session duration is set for the account.
+```
+
+That toggle is for the WARP client on managed devices. It has nothing to do with
+email login, and the error message does not make that obvious.
+
+**4c. Policies**
+
+| Field | Value |
+|---|---|
+| Policy name | `Pyron team` |
+| Action | **Allow** |
+| Rule | **Include** → **Emails** → the list of people |
+
+An explicit email list beats *"emails ending in @yourcompany.com"* for a small
+team: it is tighter, and a new account on the domain does not silently inherit
+access.
+
+⚠️ **Add your own address before saving**, or you lock yourself out of what you
+just protected. (The SSH forward still works, but you should not need it for
+this.)
+
+Note the rule must be under **Include**. A rule placed only under *Require*
+matches nobody, and the symptom is identical to every other misconfiguration
+here: you enter an email and no PIN arrives.
 
 ---
 
@@ -140,6 +198,51 @@ curl -sS --max-time 5 http://<droplet-ip>:3000   # expect: connection refused
 
 Then open the hostname in a browser: Access should challenge you, and Grafana's
 login should follow.
+
+**The one check that tells you Access is really in front:**
+
+```bash
+curl -sS -o /dev/null -w '%{redirect_url}\n' https://monitoring-stage.pyron-ai.com/
+```
+
+- `…cloudflareaccess.com/cdn-cgi/access/login/…` → Access is protecting it ✅
+- `…/login` → that is **Grafana's own** login page, meaning requests reach it
+  directly and the service is exposed to the internet ❌
+
+The second case looks reassuring in a browser — you get a login form, so it feels
+protected — which is exactly why it went unnoticed.
+
+---
+
+## When it does not work
+
+Nearly every failure below produces the same symptom: **you enter your email and
+no PIN arrives**. Access does not explain itself, so work through the causes in
+order.
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| No PIN, login page looks normal | Application has no identity provider selected | Step 4b — this was the real cause here |
+| No PIN, email is in the policy | Email not matching, or rule under *Require* instead of *Include* | Step 4c; check for typos and stray whitespace |
+| No PIN, everything configured | Mail in spam | Sender is `noreply@notify.cloudflare.com`; allow a couple of minutes |
+| Save fails with `allow_authenticate_via_warp` | "Authenticate with Cloudflare One Client" is on | Turn it off — step 4b |
+| `connection refused` in the cloudflared log | Origin points at `localhost:3000` | Step 3 — use `172.28.0.20:3000` |
+| Redirect goes to `/login`, not cloudflareaccess.com | No Access application on the hostname | Step 4 — the tunnel is public until then |
+
+**Access deliberately stays silent when an email is not authorised.** It does not
+send a PIN and does not say you lack permission, so that it reveals nothing about
+who has access. Useful for security, confusing while debugging: an unauthorised
+address and a broken configuration look identical from the outside.
+
+**Where to look from the droplet:**
+
+```bash
+journalctl -u cloudflared -n 30 --no-pager | grep -iE "registered|error"
+```
+
+`Unable to reach the origin service … connection refused` means the tunnel is up
+and Cloudflare is routing correctly — only the last hop is wrong. That is the
+step-3 mistake, and it is good news: everything before it works.
 
 ---
 
