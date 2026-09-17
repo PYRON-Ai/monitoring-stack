@@ -187,6 +187,22 @@ different events with different owners and different clocks:
 - **What was reviewed is what runs.** The doks job applies a saved plan, so an
   apply hours after the review does not silently re-plan against drifted state.
 
+**The other ordering, worth knowing.** Larger shops often invert it: deploy from
+the release branch inside the approved window first, and merge to `main` only
+once the deploy succeeded. `main` then means *"this ran in production and
+worked"* rather than *"this was approved to run"*.
+
+That is the stronger guarantee, and it closes a real gap in the order above: here,
+if an apply fails, `main` already contains code that never worked in production,
+and the next person branches from a lie. Inverted, `main` can never be ahead of
+reality.
+
+It costs more machinery — the deploy has to run from somewhere other than `main`,
+and a failed deploy leaves a branch needing a decision. Worth it when an external
+system (ServiceNow and the like) owns the window and the merge is the audit
+record that the change landed. For a team this size the simpler order is the
+right trade, but the choice is really about what you want `main` to *mean*.
+
 What has to exist before any of that is useful:
 
 - `terraform/prod.tfvars` — currently empty
