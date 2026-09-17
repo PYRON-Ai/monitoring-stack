@@ -26,14 +26,16 @@ services:
       # next — see docs/cluster-metrics-logs-study.md). Storage, dashboards and
       # alerting stay OUTSIDE the cluster, which is the whole point.
       - '--web.enable-remote-write-receiver'
-      # Bound the TSDB. Retention is time-based by default (15d) with NO size
-      # cap, so growth is driven by series count — and cAdvisor is about to add
-      # per-container series that scale with pod count (a burn hits 100+ pods).
-      # This droplet is 80GB shared with Loki, Grafana and the OS, so give the
-      # TSDB an explicit ceiling: whichever limit is reached first wins, and the
-      # disk cannot fill silently. Raise it deliberately if we ever need a longer
-      # window; the DiskAlmostFull alert is the backstop, not the plan.
-      - '--storage.tsdb.retention.time=15d'
+      # Bound the TSDB on BOTH axes — whichever limit is hit first wins, so the
+      # disk cannot fill silently no matter which way growth comes.
+      #
+      # 30d of history at the measured rate costs ~1.8GB: the stack writes
+      # ~59 MB/day at ~10.5k active series (measured 2026-09-17), and the droplet
+      # has ~70GB free. Time is the binding limit in normal operation, by a wide
+      # margin — the size cap exists for the abnormal case. A burn pushing
+      # cardinality 10x would reach ~18GB over the same window, which is why the
+      # ceiling stays where it is rather than scaling up with the window.
+      - '--storage.tsdb.retention.time=30d'
       - '--storage.tsdb.retention.size=20GB'
     ports:
       - "9090:9090"

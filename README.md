@@ -29,9 +29,9 @@ The collection side lives in [`pyron-doks-iac`](https://github.com/PYRON-Ai/pyro
 
 | Service | Port | Role |
 |---|---|---|
-| **Prometheus** | 9090 | Scrapes the droplet, and **receives** cluster metrics by remote_write. TSDB bounded to 15d / 20GB. |
+| **Prometheus** | 9090 | Scrapes the droplet, and **receives** cluster metrics by remote_write. TSDB bounded to 30d / 20GB. |
 | **Grafana** | *(none)* | Dashboards. Deliberately publishes no host port — see [Access](#access). |
-| **Loki** | 3100 | Log store. Local filesystem, 48h retention. |
+| **Loki** | 3100 | Log store. Local filesystem, 7d retention. |
 | **Alertmanager** | 9093 | Alert routing. Staging uses a **null receiver** on purpose: alerts fire and are visible, but page nobody. |
 | **promtail** | — | Ships the droplet's own container logs to Loki. |
 | **node-exporter** | 9100 | Host metrics for the droplet. |
