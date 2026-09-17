@@ -134,12 +134,117 @@ Prometheus `:9090`, Loki `:3100` and Alertmanager `:9093` are reachable normally
 
 ## Deployment
 
+> **Staging only, for now.** The monitoring stack was born in production — it was
+> the v1 Pyron stack — and what tied it to prod was the targets it scraped, the
+> VPC it sat in and the prod resources it referenced, not the workflow file. When
+> the platform moved to Kubernetes and staging, those references went with it.
+>
+> `.github/workflows/prod-deploy.yml.old` survives from that era **only on
+> `main`** (76+ commits behind `stage`), and its name no longer matches its
+> contents: it triggers on pushes to `stage`, reads `*_STAGING` secrets, and is
+> still titled "Stage Deploy" internally. Dropping the `.old` would redeploy
+> staging, not deploy production. `terraform/prod.tfvars` is empty for the same
+> reason.
+>
+> Production monitoring goes up when the production platform does, following the
+> same shape as `pyron-doks-iac`: **merging to `main` deploys nothing.**
+
 Push to `stage` runs `.github/workflows/stage-deploy.yml`:
 
 1. **infra** — `terraform apply` for the droplet and firewall
 2. **bootstrap** — Docker + fail2ban on a fresh droplet
 3. **deploy** — rsync the repo, write `.env` from the secret, `docker compose up -d`,
    then `POST /-/reload` so Prometheus picks up config changes with no scrape gap
+
+### When production comes back
+
+The target shape mirrors `pyron-doks-iac`, whose gates were written after an
+auto-applied merge destroyed staging (postmortem 2026-08-14). The rule that
+matters: **merging to `main` deploys nothing.**
+
+| Workflow | Trigger | Does |
+|---|---|---|
+| `prod-ci.yml` | PR → `main` | validate + `terraform plan`, commented on the PR |
+| `prod-deploy.yml` | **manual dispatch only** | apply, behind a typed confirmation |
+
+Three gates, no more: branch protection on `main` (review), manual dispatch (a
+merge never applies), and a `confirm` input that must read `DEPLOY` before the
+job proceeds. Deliberately **no destroy option** — tearing prod down should not
+be one dropdown away from a routine deploy.
+
+**Why this split is worth the extra step.** Separating merge from apply makes
+`main` the *approved* state rather than the *applied* one, and those are two
+different events with different owners and different clocks:
+
+- **Deploys can be scheduled.** Changes are reviewed and merged during working
+  hours; the apply waits for a maintenance window. With auto-deploy the two are
+  the same instant, so the window's constraint lands on review instead — nobody
+  merges at 17:00 on a Friday, and good changes sit around for the wrong reason.
+- **Release can be governed separately from code review.** Approving *what*
+  changes and authorising *when* it lands are distinct decisions, and often
+  distinct people. A manual dispatch is a hook anything can pull: a scheduled
+  window, or an external approval system calling `gh workflow run`.
+- **What was reviewed is what runs.** The doks job applies a saved plan, so an
+  apply hours after the review does not silently re-plan against drifted state.
+
+**The other ordering, worth knowing.** Larger shops often invert it: deploy from
+the release branch inside the approved window first, and merge to `main` only
+once the deploy succeeded. `main` then means *"this ran in production and
+worked"* rather than *"this was approved to run"*.
+
+That is the stronger guarantee, and it closes a real gap in the order above: here,
+if an apply fails, `main` already contains code that never worked in production,
+and the next person branches from a lie. Inverted, `main` can never be ahead of
+reality.
+
+It costs more machinery — the deploy has to run from somewhere other than `main`,
+and a failed deploy leaves a branch needing a decision. Worth it when an external
+system (ServiceNow and the like) owns the window and the merge is the audit
+record that the change landed.
+
+**It also suits infrastructure better than applications**, for two reasons that
+do not apply equally:
+
+- **Rollback cost.** Reverting an app is swapping back to an image that still
+  exists — seconds, and the state returns to what it was. Reverting infrastructure
+  is a *new apply* that can fail for reasons the first one did not: a destroyed
+  resource does not come back with `git revert`. The doks postmortem is the
+  example — a cluster was destroyed and the recreate then failed on an invalid
+  version slug, leaving the environment with nothing. Where rollback is cheap,
+  merging early costs little; where it is expensive, you want `main` to record
+  only what survived.
+- **Frequency.** Apps deploy many times a day, and deploy-then-merge turns into
+  standing friction: branches pending, merges queued, `main` permanently behind
+  what is running. Infrastructure deploys rarely, so the ceremony per event is
+  diluted.
+
+So the trade is not one-size: infra repos can afford the stricter ordering and
+benefit most from it, while app repos usually want merge-first and cheap
+rollback. For a team this size the simpler order is fine here too — but the
+choice is really about what you want `main` to *mean*, and how much it costs to
+be wrong.
+
+One caveat, since it is easy to over-read the split above: regulated shops often
+apply the strict ordering to *everything* — apps, infra, roles, the lot — and
+they are not being careless about the trade. Uniformity is itself the goal there,
+because the question being answered is "can you show an auditor that every change
+went through the same door?", and each per-type exception is one more thing to
+justify. They can also afford it: there is a release function, tooling that owns
+the calendar, people whose job is to run it, so the friction is absorbed by
+structure rather than landing on whoever was writing code. And the cost of a bad
+deploy is a regulatory incident, not a rollback. Rigour scales with the cost of
+being wrong, not with principle.
+
+What has to exist before any of that is useful:
+
+- `terraform/prod.tfvars` — currently empty
+- Prod-side secrets — `DO_TOKEN_PRODUCTION`, `DO_DEPLOY_*_PRODUCTION`,
+  `MONITOR_ENV_PRODUCTION`
+- Scrape targets and a VPC path to whatever prod runs — the part that actually
+  made the old pipeline "production", and the part that does not exist yet
+- An Alertmanager config that pages: see `alertmanager/config.yml` for the three
+  things missing there (no prod config file, dead bot token, and Alertmanager not
+  expanding env vars)
 
 ### Required secrets
 
