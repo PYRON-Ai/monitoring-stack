@@ -6,10 +6,24 @@
 # staging the Alertmanager runs with a NULL receiver: alerts still fire and are
 # visible in the Alertmanager UI (:9093) and Grafana, they just don't page anyone.
 #
-# The Telegram integration (bot_token/chat_id) lives ONLY in the production
-# config, added when prod comes back. Keeping it out of staging also removes the
-# ${TELEGRAM_*} placeholder that Alertmanager can't expand (it doesn't do env
-# substitution — see the null receiver below, no placeholders to break).
+# WHEN PRODUCTION COMES BACK, three things are missing — none of them started,
+# so do not assume Telegram is a flip of a switch (checked 2026-09-16):
+#
+#   1. There is NO production alertmanager config. Only this staging file exists.
+#      An earlier version of this comment implied one was already written; it was
+#      not.
+#   2. The bot token in alertmanager/.env is DEAD — Telegram's API answers
+#      "Not Found" for it. It dates from 2025-12 and was presumably revoked. A new
+#      bot (or a new token) is needed either way, so treat that file as a record
+#      of the shape, not a working credential. It is gitignored and has never been
+#      committed.
+#   3. Alertmanager does NOT expand environment variables. `${TELEGRAM_*}` in this
+#      YAML stays a literal string, so the token has to be injected another way:
+#      render the file with envsubst at deploy time, or write it whole from a
+#      secret the way the droplet's .env already is.
+#
+# The production stack is not being deployed until the production platform is
+# live, so this is a note for that moment rather than work queued now.
 global:
   resolve_timeout: 2m
 
