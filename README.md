@@ -172,6 +172,21 @@ merge never applies), and a `confirm` input that must read `DEPLOY` before the
 job proceeds. Deliberately **no destroy option** — tearing prod down should not
 be one dropdown away from a routine deploy.
 
+**Why this split is worth the extra step.** Separating merge from apply makes
+`main` the *approved* state rather than the *applied* one, and those are two
+different events with different owners and different clocks:
+
+- **Deploys can be scheduled.** Changes are reviewed and merged during working
+  hours; the apply waits for a maintenance window. With auto-deploy the two are
+  the same instant, so the window's constraint lands on review instead — nobody
+  merges at 17:00 on a Friday, and good changes sit around for the wrong reason.
+- **Release can be governed separately from code review.** Approving *what*
+  changes and authorising *when* it lands are distinct decisions, and often
+  distinct people. A manual dispatch is a hook anything can pull: a scheduled
+  window, or an external approval system calling `gh workflow run`.
+- **What was reviewed is what runs.** The doks job applies a saved plan, so an
+  apply hours after the review does not silently re-plan against drifted state.
+
 What has to exist before any of that is useful:
 
 - `terraform/prod.tfvars` — currently empty
