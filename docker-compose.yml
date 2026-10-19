@@ -13,8 +13,14 @@ services:
     command:
       - '--config.file=/etc/prometheus/prometheus.yaml'
       # Enable the lifecycle API so the pipeline can POST /-/reload to pick up
-      # config changes WITHOUT a restart (zero scrape gap). Safe here: nothing is
-      # publicly exposed (access is SSH-tunnel only, no public port on 9090).
+      # config changes WITHOUT a restart (zero scrape gap).
+      #
+      # NOTE: 9090 is NOT SSH-tunnel-only any more. Since the cluster ingest
+      # firewall opened (f278228), 9090 accepts remote_write from the in-cluster
+      # agent on var.cluster_cidrs — so this port is reachable from inside the
+      # cluster's VPC. --web.enable-lifecycle ALSO enables POST /-/quit (unauth
+      # shutdown), which the DO firewall is the only thing gating. Hardening the
+      # ingest path (basic_auth / reload-only) is tracked for the doks side.
       - '--web.enable-lifecycle'
       # Accept remote_write from the in-cluster prometheus-agent. A NodePort
       # scrape is load-balanced across the backing pods, so it hits one random
@@ -94,8 +100,11 @@ services:
   node-exporter:
     image: prom/node-exporter:v1.7.0
     <<: *common-restart
-    ports:
-      - "9100:9100"
+    # NO published port. Prometheus scrapes it over the compose bridge as
+    # `node-exporter:9100` (see config/prometheus.yaml), so there is no reason to
+    # expose host metrics on the droplet's public interface.
+    expose:
+      - "9100"
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
