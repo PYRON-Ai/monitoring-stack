@@ -11,6 +11,12 @@ spaces_region      = "fra1"
 spaces_endpoint    = "https://fra1.digitaloceanspaces.com"
 ssh_key_name       = "monitor-stack-pipeline"
 
+# In-cluster ingest allow-list (9090 remote_write, 3100 Loki push). Staging's
+# DOKS cluster shares this VPC: 10.0.0.0/16 is the node/VPC range and
+# 10.105.0.0/16 is the pod/CNI range (DO does not SNAT pod egress, so the pod
+# range is required too). Verified on the live staging cluster 2026-08-28.
+cluster_cidrs = ["10.0.0.0/16", "10.105.0.0/16"]
+
 # false = CREATE/maintain the staging monitoring droplet (not a destroy run).
 destroy = false
 

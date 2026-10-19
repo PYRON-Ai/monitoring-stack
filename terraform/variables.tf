@@ -86,3 +86,20 @@ variable "working_vpc" {
   type        = string
 }
 
+# Source ranges allowed to reach the in-cluster ingest ports (9090 remote_write,
+# 3100 Loki push). This is per-ENVIRONMENT because each DOKS cluster lives in its
+# own VPC with its own node and pod/CNI ranges, and DO does NOT SNAT pod->VPC
+# egress to the node IP — so the firewall must admit the POD range too, not just
+# the node range (see the firewall rules in main.tf for the full story).
+#
+# An EMPTY list means those ingest ports are not opened at all. Production ships
+# with [] on purpose: its cluster is in a separate VPC and the network path has
+# not been worked out yet, so there is nothing legitimate to admit and opening
+# staging's ranges here would only drop prod-sourced traffic silently. Staging
+# sets the two ranges it actually uses.
+variable "cluster_cidrs" {
+  description = "CIDRs allowed to reach the in-cluster ingest ports (9090/3100). Empty = ports stay closed."
+  type        = list(string)
+  default     = []
+}
+

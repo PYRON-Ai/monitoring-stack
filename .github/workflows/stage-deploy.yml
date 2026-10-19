@@ -35,7 +35,9 @@ jobs:
 
       - name: Terraform init
         working-directory: terraform
-        run: terraform init -input=false
+        # key is supplied here (not in backend.tf) so staging and production keep
+        # separate state files in the same bucket. See terraform/backend.tf.
+        run: terraform init -input=false -backend-config="key=staging/terraform.tfstate"
 
       - name: Terraform apply
         working-directory: terraform
@@ -164,7 +166,7 @@ jobs:
 
       - name: Terraform init (backend + state lock)
         working-directory: terraform
-        run: terraform init -input=false
+        run: terraform init -input=false -backend-config="key=staging/terraform.tfstate"
 
       - name: Terraform Destroy ⚠ IRREVERSÍVEL
         working-directory: terraform
