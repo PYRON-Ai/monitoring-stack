@@ -16,21 +16,20 @@ spaces_region      = "fra1"
 spaces_endpoint    = "https://fra1.digitaloceanspaces.com"
 ssh_key_name       = "monitor-stack-pipeline"
 
-# In-cluster ingest allow-list — INTENTIONALLY EMPTY in production.
+# In-cluster ingest allow-list — opens 9090 (remote_write) and 3100 (Loki push)
+# to the production DOKS cluster.
 #
-# The production DOKS cluster is in a SEPARATE VPC (pyron-vpc-production), with
-# its own node and pod/CNI ranges that differ from staging's. Those ranges are
-# not wired up here yet, and the cluster side does not ship metrics/logs to this
-# droplet yet either — pyron-doks-iac/terraform/platform/prod.tfvars leaves
-# enable_metrics_shipping / enable_log_shipping off for exactly this reason.
+# The production cluster is in a SEPARATE VPC (pyron-vpc-production) with its own
+# ranges, DIFFERENT from staging's (staging was 10.0.0.0/16 + 10.105.0.0/16).
+# Both ranges are required because DO does not SNAT pod→VPC egress to the node
+# IP, so the agent's packets arrive with their POD IP — admitting only the node
+# range would drop the remote_write (the i/o-timeout trap documented in main.tf).
 #
-# So ports 9090/3100 stay CLOSED on the prod droplet for now (empty list => the
-# dynamic firewall rules in main.tf are not created). Opening staging's ranges
-# here would admit nothing real and only risk dropping prod-sourced traffic
-# silently once the agent is deployed. When the prod cluster→droplet network
-# path is worked out, set this to the prod VPC node range + pod/CNI range
-# (verify the pod range on the live prod cluster, as was done for staging).
-cluster_cidrs = []
+# Verified on the live prod cluster (do-sgp1-pyron-doks-production):
+#   nodes 10.1.0.3–10.1.0.9      → VPC range  10.1.0.0/16
+#   pods  10.150.0.x/1.x/2.x     → CNI range  10.150.0.0/16
+# (hostNetwork pods show the node IP in 10.1.0.x, already covered by the VPC range.)
+cluster_cidrs = ["10.1.0.0/16", "10.150.0.0/16"]
 
 # false = CREATE/maintain the production monitoring droplet (not a destroy run).
 # NEVER flip this to true in production.
