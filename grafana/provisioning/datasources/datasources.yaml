@@ -25,7 +25,7 @@ datasources:
     access: proxy
     url: http://loki:3100
     jsonData:
-      # Cap the range a single query may scan. Loki is on local disk with 48h
-      # retention here; an unbounded query over a burn's worth of logs is how a
-      # dashboard panel stalls the whole datasource.
+      # Cap the range a single query may scan. Loki is on local disk with 7d
+      # (168h) retention here; an unbounded query over a burn's worth of logs is
+      # how a dashboard panel stalls the whole datasource.
       maxLines: 1000

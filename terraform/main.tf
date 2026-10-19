@@ -60,10 +60,11 @@ resource "digitalocean_firewall" "monitoring" {
   # pod-sourced traffic. 9090 is also the Prometheus UI, but that stays
   # SSH-tunnel-only; these rules admit in-cluster traffic only, nothing public.
   #
-  # When cluster_cidrs is EMPTY (production today — separate VPC, network path
-  # not worked out yet) these rules are not created at all, so the ports stay
-  # closed rather than admitting staging's ranges and dropping prod traffic
-  # silently. See var.cluster_cidrs and pyron-doks-iac platform/prod.tfvars.
+  # When cluster_cidrs is EMPTY these rules are not created at all, so the ports
+  # stay closed rather than admitting one environment's ranges and dropping the
+  # other's traffic silently. Both environments now set it (stage.tfvars and
+  # prod.tfvars — prod opened in f278228), each to its OWN VPC + CNI ranges. See
+  # var.cluster_cidrs and pyron-doks-iac platform/prod.tfvars.
   dynamic "inbound_rule" {
     for_each = length(var.cluster_cidrs) > 0 ? [1] : []
     content {
