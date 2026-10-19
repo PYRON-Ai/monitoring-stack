@@ -1,0 +1,58 @@
+name: Open PR stage → main
+
+# After stage is deployed (push to stage, which stage-deploy.yml acts on), open
+# a PR promoting stage → main so the change is queued for production review.
+#
+# This ONLY opens the PR. Merging to main still requires the branch-protection
+# approvals, and merging itself deploys NOTHING — production apply is the manual
+# deploy-prod dispatch ("type DEPLOY"). So this automates the paperwork of
+# promotion, not the promotion decision and not the deploy.
+#
+# Deliberately a separate workflow from stage-deploy.yml: opening the promotion
+# PR is unrelated to provisioning the staging droplet, and keeping it out of the
+# deploy job means a hiccup here can never affect a staging deploy.
+
+permissions:
+  contents: read
+  pull-requests: write
+
+on:
+  push:
+    branches:
+      - stage
+
+jobs:
+  open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      # Idempotent: if an open stage → main PR already exists, update nothing and
+      # exit cleanly rather than failing. `gh pr create` errors when a PR for the
+      # same head/base is already open, so check first.
+      - name: Open (or skip) stage → main PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          existing=$(gh pr list --base main --head stage --state open \
+            --json number --jq '.[0].number // empty')
+
+          if [ -n "$existing" ]; then
+            echo "An open stage → main PR already exists (#$existing) — nothing to do."
+            exit 0
+          fi
+
+          gh pr create \
+            --base main \
+            --head stage \
+            --title "[Auto] Promote stage → main" \
+            --body "Auto-opened after a stage deploy. Promotes stage to main for production review.
+
+          Merging this deploys **nothing** — production apply is the manual \`deploy-prod\` dispatch. Branch-protection approvals still apply." 2>&1 || {
+              echo "::warning::Could not open the stage → main PR (see log). This is non-fatal; open it manually if needed."
+              exit 0
+            }
+
+          echo "Opened stage → main promotion PR."
