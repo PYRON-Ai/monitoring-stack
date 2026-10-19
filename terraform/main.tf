@@ -46,38 +46,40 @@ resource "digitalocean_firewall" "monitoring" {
     source_addresses = ["0.0.0.0/0", "::/0"]
   }
 
-  # Loki push endpoint (:3100) — the in-cluster log shipper (Alloy) pushes pod
-  # logs here. Same two source ranges as the 9090 rule below, for the
-  # same reason: 10.0.0.0/16 is the VPC (nodes) and 10.105.0.0/16 is the DOKS
-  # pod/CNI network, and DO does NOT SNAT pod->VPC egress to the node IP, so a
-  # pod's packets arrive with their POD IP. Verified on the live staging cluster
-  # (2026-08-28): nodes are 10.0.0.4/10.0.0.5, pods 10.105.x.
+  # Loki push endpoint (:3100) and Prometheus remote_write receiver (:9090) —
+  # the in-cluster shippers push here (Alloy for logs, a prometheus-agent for
+  # metrics). These are PERMANENT observability plumbing, not tied to a single
+  # burn: the cluster→droplet path needs them open.
   #
-  # This previously allowed 10.1.0.0/16 — the RETIRED prod VPC — so it admitted
-  # nothing at all: the range has no live hosts since the k8s migration. Nothing
-  # loses access in this change; it only opens the path the cluster actually
-  # uses. Like 9090, these rules admit in-cluster traffic only, nothing public.
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "3100"
-    source_addresses = ["10.0.0.0/16", "10.105.0.0/16"]
+  # The source ranges come from var.cluster_cidrs and are per-ENVIRONMENT. Each
+  # DOKS cluster lives in its own VPC: the ranges must cover BOTH the node range
+  # (the VPC) AND the pod/CNI range, because DO does NOT SNAT pod→VPC egress to
+  # the node IP — a pod's packets arrive with their POD IP. Verified on the live
+  # STAGING cluster (2026-08-28): nodes 10.0.0.4/10.0.0.5, pods 10.105.x; without
+  # the CNI range the receiver saw i/o timeouts as the firewall dropped the
+  # pod-sourced traffic. 9090 is also the Prometheus UI, but that stays
+  # SSH-tunnel-only; these rules admit in-cluster traffic only, nothing public.
+  #
+  # When cluster_cidrs is EMPTY (production today — separate VPC, network path
+  # not worked out yet) these rules are not created at all, so the ports stay
+  # closed rather than admitting staging's ranges and dropping prod traffic
+  # silently. See var.cluster_cidrs and pyron-doks-iac platform/prod.tfvars.
+  dynamic "inbound_rule" {
+    for_each = length(var.cluster_cidrs) > 0 ? [1] : []
+    content {
+      protocol         = "tcp"
+      port_range       = "3100"
+      source_addresses = var.cluster_cidrs
+    }
   }
 
-  # Prometheus remote_write receiver (:9090) — in-cluster metric shippers push
-  # here (the load-test prometheus-agent today; any in-cluster exporter that
-  # remote_writes going forward). This is PERMANENT observability plumbing, not
-  # tied to a single burn: the cluster→droplet metrics path needs this port open.
-  #
-  # Two source ranges: 10.0.0.0/16 is the VPC (nodes), and 10.105.0.0/16 is the
-  # DOKS POD/CNI network. DO does NOT SNAT pod→VPC egress to the node IP, so the
-  # agent's packets arrive with their POD IP (10.105.x.x) — verified: without the
-  # CNI range the receiver saw i/o timeouts (firewall dropped the pod-sourced
-  # traffic). 9090 is also the Prometheus UI, but that stays SSH-tunnel-only;
-  # these rules only admit in-cluster traffic, nothing public.
-  inbound_rule {
-    protocol         = "tcp"
-    port_range       = "9090"
-    source_addresses = ["10.0.0.0/16", "10.105.0.0/16"]
+  dynamic "inbound_rule" {
+    for_each = length(var.cluster_cidrs) > 0 ? [1] : []
+    content {
+      protocol         = "tcp"
+      port_range       = "9090"
+      source_addresses = var.cluster_cidrs
+    }
   }
 
   outbound_rule {
