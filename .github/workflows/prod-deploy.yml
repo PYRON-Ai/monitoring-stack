@@ -2,7 +2,6 @@ name: Deploy Stack (PRODUCTION)
 
 permissions:
   contents: read
-  pull-requests: write
 
 # Production deploys are MANUAL only. There is no push trigger on purpose: prod
 # goes out when a human clicks "Run workflow", never as a side effect of a merge
@@ -93,7 +92,7 @@ jobs:
       USER: ${{ secrets.DO_DEPLOY_USER_PRODUCTION }}
 
     steps:
-      - uses: webfactory/ssh-agent@v0.7.0
+      - uses: webfactory/ssh-agent@836c84ec59a0e7bc0eabc79988384eb567561ee2 # v0.7.0
         with:
           ssh-private-key: ${{ secrets.DO_DEPLOY_SSH_KEY }}
 
@@ -183,7 +182,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Load SSH KEY
-        uses: webfactory/ssh-agent@v0.7.0
+        uses: webfactory/ssh-agent@836c84ec59a0e7bc0eabc79988384eb567561ee2 # v0.7.0
         with:
           ssh-private-key: ${{ secrets.DO_DEPLOY_SSH_KEY }}
 
