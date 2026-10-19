@@ -1,44 +1,95 @@
-version: "3.9"
-
 x-common-restart: &common-restart
   restart: unless-stopped
 
 services:
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.53.0
     <<: *common-restart
     env_file: .env
     volumes:
       - ./config/prometheus.yaml:/etc/prometheus/prometheus.yaml:ro
-      - prometheus_data:/prometheus
+      - ./config/rules:/etc/prometheus/rules:ro
+      - ./data/prometheus:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yaml'
+      # Enable the lifecycle API so the pipeline can POST /-/reload to pick up
+      # config changes WITHOUT a restart (zero scrape gap). Safe here: nothing is
+      # publicly exposed (access is SSH-tunnel only, no public port on 9090).
+      - '--web.enable-lifecycle'
+      # Accept remote_write from the in-cluster prometheus-agent. A NodePort
+      # scrape is load-balanced across the backing pods, so it hits one random
+      # pod per interval (serrated, useless aggregation) — the reason the webhook
+      # scrape was retired. Instead an agent INSIDE the cluster discovers every
+      # pod (kubernetes_sd) and remote_writes the per-pod series here, so
+      # sum()/max() over pods is exact. This is the standing ingest path for
+      # cluster-side metrics (app metrics today; cAdvisor + kube-state-metrics
+      # next — see docs/cluster-metrics-logs-study.md). Storage, dashboards and
+      # alerting stay OUTSIDE the cluster, which is the whole point.
+      - '--web.enable-remote-write-receiver'
+      # Bound the TSDB on BOTH axes — whichever limit is hit first wins, so the
+      # disk cannot fill silently no matter which way growth comes.
+      #
+      # 30d of history at the measured rate costs ~1.8GB: the stack writes
+      # ~59 MB/day at ~10.5k active series (measured 2026-09-17), and the droplet
+      # has ~70GB free. Time is the binding limit in normal operation, by a wide
+      # margin — the size cap exists for the abnormal case. A burn pushing
+      # cardinality 10x would reach ~18GB over the same window, which is why the
+      # ceiling stays where it is rather than scaling up with the window.
+      - '--storage.tsdb.retention.time=30d'
+      - '--storage.tsdb.retention.size=20GB'
     ports:
       - "9090:9090"
+    networks:
+      - monitoring
 
   alertmanager:
-    image: prom/alertmanager:v0.28.0
+    image: prom/alertmanager:v0.27.0
     <<: *common-restart
+    env_file: .env
     volumes:
       - ./alertmanager/config.yml:/etc/alertmanager/config.yml:ro
-      - alertmanager_data:/alertmanager
+      - ./data/alertmanager:/alertmanager
     command:
       - '--config.file=/etc/alertmanager/config.yml'
     ports:
       - "9093:9093"
+    networks:
+      - monitoring
 
   grafana:
     image: grafana/grafana:10.0.5
     <<: *common-restart
     env_file: .env
     volumes:
-      - grafana_data:/var/lib/grafana
+      - ./data/grafana:/var/lib/grafana
       - ./grafana/provisioning:/etc/grafana/provisioning
-    ports:
-      - "3000:3000"
+    # NO published port. Grafana is reachable only over the compose bridge, which
+    # keeps it off the public internet: the droplet exposes nothing on 3000.
+    #
+    # cloudflared is NOT a service here — it runs as a systemd unit on the host
+    # (`systemctl status cloudflared`), pointed at 172.28.0.20:3000 below. Running
+    # it outside the stack means the tunnel survives a `docker compose down`,
+    # which is exactly when you most want to reach Grafana, and keeps the tunnel
+    # token out of the .env.
+    #
+    # For admin access without Cloudflare, forward to the container's address on
+    # the bridge — NOT to localhost, and not to the name "grafana". sshd runs on
+    # the host, outside the compose network, so it resolves neither: "localhost"
+    # reaches a port nothing publishes any more, and the name fails with
+    # "Temporary failure in name resolution".
+    #   ssh -L 3000:172.28.0.20:3000 <user>@<droplet>   (see docs/access.md)
+    expose:
+      - "3000"
     depends_on:
       - prometheus
       - alertmanager
+    networks:
+      monitoring:
+        # Fixed so the break-glass SSH forward has a stable address to name.
+        # Docker hands out bridge addresses dynamically otherwise, and looking up
+        # a container IP is the last thing anyone should have to do mid-incident.
+        ipv4_address: 172.28.0.20
+
 
   node-exporter:
     image: prom/node-exporter:v1.7.0
@@ -53,40 +104,57 @@ services:
       - '--path.procfs=/host/proc'
       - '--path.sysfs=/host/sys'
       - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($|/)'
-
-  digitalocean-exporter:
-    image: metalmatze/digitalocean_exporter:0.6.1
-    restart: unless-stopped
-    environment:
-      DIGITALOCEAN_TOKEN: "${DO_API_TOKEN_READONLY}"   # cria esse env no .env
-    ports:
-      - "9212:9212"
+    networks:
+      - monitoring
 
   loki:
     image: grafana/loki:2.9.0
     restart: unless-stopped
     volumes:
       - ./config/loki-config.yaml:/etc/loki/loki-config.yaml:ro
-      - loki_data:/loki
+      - ./data/loki:/loki
     ports:
       - "3100:3100"
-
+    networks:
+      - monitoring
 
   promtail:
     image: grafana/promtail:2.9.0
+    <<: *common-restart
     volumes:
-      - ./config/promtail.yaml:/etc/promtail/promtail.yaml:ro
-      - promtail_positions:/var/lib/promtail
+      - ./config/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+      - ./data/promtail:/var/lib/promtail
       - /var/log:/var/log:ro
       - /var/lib/docker/containers:/var/lib/docker/containers:ro
       - /var/run/docker.sock:/var/run/docker.sock
-    command: -config.file=/etc/promtail/promtail.yaml
+    command: -config.file=/etc/promtail/promtail-config.yaml
     depends_on:
       - loki
+    networks:
+      - monitoring
 
-volumes:
-  prometheus_data:
-  alertmanager_data:
-  grafana_data:
-  loki_data:
-  promtail_positions:
+# Data lives in ./data on the droplet, as BIND MOUNTS rather than named volumes.
+#
+# The reason is blunt: `docker compose down --volumes` deletes named volumes and
+# does not touch bind mounts. With named volumes a single flag — one someone
+# reaches for when a container misbehaves — silently destroyed metric history,
+# log history, and every Grafana user and setting made through the UI. The only
+# defence was a line in the README asking people to be careful.
+#
+# The tradeoff is that directory permissions become ours to get right: each image
+# runs as a different user (prometheus 65534, grafana 472, loki 10001), and a
+# bind mount is created root-owned, so the container cannot write to it. The
+# deploy pipeline creates each directory with the right owner before starting the
+# stack; see the "Prepare data directories" step in stage-deploy.yml.
+
+# One explicit network with a fixed subnet so Grafana can hold a stable address
+# (172.28.0.20). Both things that reach it from outside the stack name that
+# address directly — the host's cloudflared unit and the break-glass SSH forward
+# — and Compose's default network reassigns container addresses on restart,
+# which would break both without warning.
+networks:
+  monitoring:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16

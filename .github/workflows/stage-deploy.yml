@@ -35,7 +35,9 @@ jobs:
 
       - name: Terraform init
         working-directory: terraform
-        run: terraform init -input=false
+        # key is supplied here (not in backend.tf) so staging and production keep
+        # separate state files in the same bucket. See terraform/backend.tf.
+        run: terraform init -input=false -backend-config="key=staging/terraform.tfstate"
 
       - name: Terraform apply
         working-directory: terraform
@@ -79,14 +81,14 @@ jobs:
             # remove o arquivo quebrado
             rm -f /etc/apt/sources.list.d/docker.list
 
-            # espera qualquer apt que ainda esteja processando
-            while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
-              echo "🔒 APT ocupado — aguardando 5s..."
-              sleep 5
-            done
+            # On a fresh droplet, cloud-init / unattended-upgrades holds the apt
+            # locks at first boot. The old loop only waited on lock-frontend, but
+            # `apt-get update` needs the lists lock too — so it raced and failed.
+            # DPkg::Lock::Timeout makes apt itself wait for ALL locks (up to 5min).
+            APT_WAIT="-o DPkg::Lock::Timeout=300"
 
-            apt-get update -y
-            apt-get install -y ca-certificates curl gnupg lsb-release
+            apt-get $APT_WAIT update -y
+            apt-get $APT_WAIT install -y ca-certificates curl gnupg lsb-release
 
             install -m 0755 -d /etc/apt/keyrings
             curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg
@@ -97,10 +99,47 @@ jobs:
             https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" \
             | tee /etc/apt/sources.list.d/docker.list
 
-            apt-get update -y
-            apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+            apt-get $APT_WAIT update -y
+            apt-get $APT_WAIT install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
             systemctl enable docker --now
+          EOF
+
+      - name: Install and configure Fail2ban (CI safe)
+        run: |
+          ssh root@$HOST <<'EOF'
+          set -eux
+
+          # Wait for any apt lock (cloud-init/unattended-upgrades on fresh boot).
+          apt-get -o DPkg::Lock::Timeout=300 update -y
+          apt-get -o DPkg::Lock::Timeout=300 install -y fail2ban
+
+          cat > /etc/fail2ban/jail.d/sshd.local <<'JAIL_EOF'
+          [sshd]
+          enabled = true
+          backend = systemd
+          port = ssh
+          maxretry = 5
+          findtime = 10m
+          bantime = 1h
+          JAIL_EOF
+
+          systemctl enable fail2ban
+          systemctl restart fail2ban
+
+          echo "Waiting for fail2ban socket..."
+
+          for i in {1..10}; do
+            if [ -S /var/run/fail2ban/fail2ban.sock ]; then
+              echo "Socket ready."
+              break
+            fi
+            sleep 1
+          done
+
+          fail2ban-client status || true
+          fail2ban-client status sshd || true
+
           EOF
 
   destroy:
@@ -127,7 +166,7 @@ jobs:
 
       - name: Terraform init (backend + state lock)
         working-directory: terraform
-        run: terraform init -input=false
+        run: terraform init -input=false -backend-config="key=staging/terraform.tfstate"
 
       - name: Terraform Destroy ⚠ IRREVERSÍVEL
         working-directory: terraform
@@ -164,8 +203,32 @@ jobs:
       - name: Sync stack (idempotente, rápido, cirúrgico)
         run: |
           set -e
-          rsync -avzh --delete --exclude '.git' --exclude '.env' ./ \
+          # --exclude 'data' is load-bearing: ./data holds the stack's databases as
+          # bind mounts, and --delete would wipe them on every deploy because the
+          # directory does not exist in the repo.
+          rsync -avzh --delete --exclude '.git' --exclude '.env' --exclude 'data' ./ \
             $DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH
+
+      # The secret is written to the droplet verbatim, so a malformed one lands
+      # silently and the stack starts on defaults. That is not hypothetical: this
+      # secret held the literal string "123123" for weeks, so Grafana ran with no
+      # admin configuration at all and its password existed only inside the
+      # container's database — one `docker compose down -v` from being lost.
+      #
+      # A warning, not a failure: an incomplete .env still deploys a working
+      # stack, and blocking the deploy would be worse than flagging it.
+      - name: Sanity-check the environment secret
+        if: env.MONITOR_ENV != ''
+        run: |
+          missing=""
+          for key in GF_SECURITY_ADMIN_USER GF_SECURITY_ADMIN_PASSWORD; do
+            echo "${MONITOR_ENV}" | grep -qE "^[[:space:]]*${key}[[:space:]]*=[[:space:]]*[^[:space:]]" || missing="$missing $key"
+          done
+          if [ -n "$missing" ]; then
+            echo "::warning::MONITOR_ENV_STAGING is missing:$missing — Grafana will start on defaults and its credentials will live only in the container volume. See .env.example."
+          else
+            echo "Environment secret carries the expected Grafana keys."
+          fi
 
       - name: Push environment
         if: env.MONITOR_ENV != ''
@@ -175,30 +238,31 @@ jobs:
           chmod 600 ${DEPLOY_PATH}/.env
           EOF
 
-      - name: Bootstrap Loki volumes (directories fix)
+      # Bind-mounted data directories must exist AND be owned by the uid each
+      # image runs as — a bind mount is created root-owned, and the container
+      # then cannot write to it. Named volumes handled this automatically; this
+      # is the cost of not having a `down --volumes` that can delete the data.
+      - name: Prepare data directories
         run: |
           ssh $DEPLOY_USER@$DEPLOY_HOST <<EOF
-            set -eux
+            set -eu
             cd $DEPLOY_PATH
 
-            # Garante que os volumes existem
-            docker volume create loki_data || true
-            docker volume create loki_wal || true
+            # uid:gid per image — verified against the running containers:
+            #   prometheus   65534:65534 (nobody)
+            #   grafana        472:0     (grafana:root)
+            #   loki         10001:10001
+            #   alertmanager 65534:65534 (nobody)
+            #   promtail         0:0     (root)
+            mkdir -p data/prometheus data/grafana data/loki data/alertmanager data/promtail
+            chown -R 65534:65534 data/prometheus data/alertmanager
+            chown -R 472:0       data/grafana
+            chown -R 10001:10001 data/loki
+            chown -R 0:0         data/promtail
+            chmod 750 data
 
-            echo "📦 Preparing Loki directory structure..."
-
-            docker run --rm -v loki_data:/loki alpine sh -c "\
-              mkdir -p /loki && \
-              mkdir -p /loki/index /loki/cache /loki/chunks /loki/compactor /loki/boltdb-shipper-compactor && \
-              chown -R 10001:10001 /loki \
-            "
-
-            docker run --rm -v loki_wal:/wal alpine sh -c "\
-              mkdir -p /wal && \
-              chown -R 10001:10001 /wal \
-            "
-
-            echo "📁 Loki volume bootstrap completed."
+            echo "data directories ready:"
+            ls -ld data/*
           EOF
 
       - name: Deploy + Restart Stack
@@ -207,6 +271,32 @@ jobs:
           cd $DEPLOY_PATH
           docker compose pull
           docker compose up -d --remove-orphans
+
+          # Prometheus config: recreate the container when the file changed,
+          # otherwise hot-reload.
+          #
+          # POST /-/reload alone is NOT enough here, and it fails silently. The
+          # config is a SINGLE-FILE bind mount, and rsync replaces files rather
+          # than editing them in place — so the new file gets a new inode while
+          # the container's mount stays bound to the old one. The container keeps
+          # reading the previous config, /-/reload dutifully re-reads that same
+          # stale file, and returns 200. Everything looks fine and nothing
+          # changed; a retired scrape job kept firing InstanceDown for hours that
+          # way.
+          #
+          # Comparing the file the container sees against the one on disk detects
+          # exactly that case. A recreate costs a few seconds of scrape gap and is
+          # the only thing that re-binds the mount; the reload path stays for the
+          # common case where nothing changed.
+          sleep 5
+          if docker compose exec -T prometheus cat /etc/prometheus/prometheus.yaml 2>/dev/null \
+               | diff -q - config/prometheus.yaml >/dev/null 2>&1; then
+            curl -fsS -X POST http://localhost:9090/-/reload && echo "prometheus config reloaded" \
+              || echo "WARN: prometheus reload failed (config applies on next restart)"
+          else
+            echo "prometheus config changed on disk — recreating so the mount picks it up"
+            docker compose up -d --force-recreate prometheus
+          fi
           EOF
 
       - name: Stack report final

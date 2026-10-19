@@ -1,0 +1,292 @@
+name: Deploy Stack (PRODUCTION)
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Production deploys are MANUAL only. There is no push trigger on purpose: prod
+# goes out when a human clicks "Run workflow", never as a side effect of a merge
+# — "merging to main deploys nothing" (see README "When production comes back").
+# The confirm input is a typed safety latch — the run refuses unless it reads
+# exactly "DEPLOY". There is DELIBERATELY no destroy option here: tearing prod
+# down must not be one dropdown away from a routine deploy.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "DEPLOY" to confirm a PRODUCTION deploy'
+        required: true
+        default: ''
+
+jobs:
+  # A cheap gate that fails fast if the confirm phrase is wrong, before any
+  # cloud credential is touched or any infra step runs.
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify confirmation phrase
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "DEPLOY" ]; then
+            echo "::error::Confirmation phrase mismatch — refusing to deploy to PRODUCTION."
+            exit 1
+          fi
+          echo "Confirmation accepted — proceeding with PRODUCTION deploy."
+
+  infra:
+    needs: guard
+    runs-on: ubuntu-latest
+    outputs:
+      droplet_ip: ${{ steps.tf_outputs.outputs.droplet_ip }}
+
+    env:
+      TF_VAR_do_token:             ${{ secrets.DO_TOKEN_PRODUCTION }}
+      TF_VAR_spaces_access_id:     ${{ secrets.DO_SPACES_ACCESS_KEY_ID }}
+      TF_VAR_spaces_secret_key:    ${{ secrets.DO_SPACES_SECRET_ACCESS_KEY }}
+      TF_VAR_ssh_key_fingerprint:  ${{ secrets.DO_SSH_FINGERPRINT_PRODUCTION }}
+
+      AWS_ACCESS_KEY_ID:           ${{ secrets.DO_SPACES_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY:       ${{ secrets.DO_SPACES_SECRET_ACCESS_KEY }}
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@633666f66e0061ca3b725c73b2ec20cd13a8fdd1 # v2
+        with:
+          terraform_version: 1.5.7
+          # Need the raw `terraform output` value in "Capture outputs" below; the
+          # wrapper would decorate stdout and break the IP grep.
+          terraform_wrapper: false
+
+      - name: Terraform init
+        working-directory: terraform
+        # Production state key — kept SEPARATE from staging/terraform.tfstate so
+        # the two environments can never clobber each other. See backend.tf.
+        run: terraform init -input=false -backend-config="key=production/terraform.tfstate"
+
+      # Plan to a saved file, then apply THAT file — what shows in the log is
+      # exactly what applies (apply tfplan does not re-plan). If state drifted
+      # between the PR plan (prod-ci.yml) and this apply, the apply fails loudly
+      # instead of doing something unreviewed. Mirrors pyron-doks-iac deploy-prod.
+      - name: Terraform plan (saved)
+        working-directory: terraform
+        run: terraform plan -out=tfplan -var-file=prod.tfvars -input=false
+
+      - name: Terraform apply (saved plan)
+        working-directory: terraform
+        run: terraform apply -input=false tfplan
+
+      - name: Capture outputs
+        id: tf_outputs
+        working-directory: terraform
+        run: |
+          RAW=$(terraform output droplet_ip)
+          IP=$(echo "$RAW" | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n 1)
+          echo "droplet_ip=$IP" >> "$GITHUB_OUTPUT"
+
+  bootstrap:
+    needs: infra
+    runs-on: ubuntu-latest
+
+    env:
+      HOST: ${{ needs.infra.outputs.droplet_ip }}
+      USER: ${{ secrets.DO_DEPLOY_USER_PRODUCTION }}
+
+    steps:
+      - uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.DO_DEPLOY_SSH_KEY }}
+
+      - name: Add host fingerprint
+        run: ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts
+
+      - name: Provision droplet — instala Docker + deps
+        run: |
+          ssh $USER@$HOST <<EOF
+            set -eux
+
+            # remove o arquivo quebrado
+            rm -f /etc/apt/sources.list.d/docker.list
+
+            # On a fresh droplet, cloud-init / unattended-upgrades holds the apt
+            # locks at first boot. The old loop only waited on lock-frontend, but
+            # `apt-get update` needs the lists lock too — so it raced and failed.
+            # DPkg::Lock::Timeout makes apt itself wait for ALL locks (up to 5min).
+            APT_WAIT="-o DPkg::Lock::Timeout=300"
+
+            apt-get \$APT_WAIT update -y
+            apt-get \$APT_WAIT install -y ca-certificates curl gnupg lsb-release
+
+            install -m 0755 -d /etc/apt/keyrings
+            curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --batch --yes --dearmor -o /etc/apt/keyrings/docker.gpg
+            chmod a+r /etc/apt/keyrings/docker.gpg
+
+            # recria a source, agora expande \$(...)
+            echo "deb [arch=\$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+            https://download.docker.com/linux/ubuntu \$(lsb_release -cs) stable" \
+            | tee /etc/apt/sources.list.d/docker.list
+
+            apt-get \$APT_WAIT update -y
+            apt-get \$APT_WAIT install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+
+            systemctl enable docker --now
+          EOF
+
+      - name: Install and configure Fail2ban (CI safe)
+        run: |
+          ssh root@$HOST <<'EOF'
+          set -eux
+
+          # Wait for any apt lock (cloud-init/unattended-upgrades on fresh boot).
+          apt-get -o DPkg::Lock::Timeout=300 update -y
+          apt-get -o DPkg::Lock::Timeout=300 install -y fail2ban
+
+          cat > /etc/fail2ban/jail.d/sshd.local <<'JAIL_EOF'
+          [sshd]
+          enabled = true
+          backend = systemd
+          port = ssh
+          maxretry = 5
+          findtime = 10m
+          bantime = 1h
+          JAIL_EOF
+
+          systemctl enable fail2ban
+          systemctl restart fail2ban
+
+          echo "Waiting for fail2ban socket..."
+
+          for i in {1..10}; do
+            if [ -S /var/run/fail2ban/fail2ban.sock ]; then
+              echo "Socket ready."
+              break
+            fi
+            sleep 1
+          done
+
+          fail2ban-client status || true
+          fail2ban-client status sshd || true
+
+          EOF
+
+  deploy:
+    needs: [infra, bootstrap]
+    runs-on: ubuntu-latest
+
+    env:
+      DEPLOY_HOST: ${{ needs.infra.outputs.droplet_ip }}
+      DEPLOY_USER: ${{ secrets.DO_DEPLOY_USER_PRODUCTION }}
+      DEPLOY_PATH: ${{ secrets.DO_DEPLOY_PATH_PRODUCTION }}
+      MONITOR_ENV: ${{ secrets.MONITOR_ENV_PRODUCTION }}
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Load SSH KEY
+        uses: webfactory/ssh-agent@v0.7.0
+        with:
+          ssh-private-key: ${{ secrets.DO_DEPLOY_SSH_KEY }}
+
+      - name: Add host fingerprint
+        run: ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts
+
+      - name: Test SSH
+        run: ssh -o BatchMode=yes $DEPLOY_USER@$DEPLOY_HOST "echo 🔥 Connected!"
+
+      - name: Sync stack (idempotente, rápido, cirúrgico)
+        run: |
+          set -e
+          # --exclude 'data' is load-bearing: ./data holds the stack's databases as
+          # bind mounts, and --delete would wipe them on every deploy because the
+          # directory does not exist in the repo.
+          rsync -avzh --delete --exclude '.git' --exclude '.env' --exclude 'data' ./ \
+            $DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH
+
+      # The secret is written to the droplet verbatim, so a malformed one lands
+      # silently and the stack starts on defaults. A warning, not a failure: an
+      # incomplete .env still deploys a working stack, and blocking the deploy
+      # would be worse than flagging it.
+      - name: Sanity-check the environment secret
+        if: env.MONITOR_ENV != ''
+        run: |
+          missing=""
+          for key in GF_SECURITY_ADMIN_USER GF_SECURITY_ADMIN_PASSWORD; do
+            echo "${MONITOR_ENV}" | grep -qE "^[[:space:]]*${key}[[:space:]]*=[[:space:]]*[^[:space:]]" || missing="$missing $key"
+          done
+          if [ -n "$missing" ]; then
+            echo "::warning::MONITOR_ENV_PRODUCTION is missing:$missing — Grafana will start on defaults and its credentials will live only in the container volume. See .env.example."
+          else
+            echo "Environment secret carries the expected Grafana keys."
+          fi
+
+      - name: Push environment
+        if: env.MONITOR_ENV != ''
+        run: |
+          ssh $DEPLOY_USER@$DEPLOY_HOST <<EOF
+          echo "${MONITOR_ENV}" > ${DEPLOY_PATH}/.env
+          chmod 600 ${DEPLOY_PATH}/.env
+          EOF
+
+      # Bind-mounted data directories must exist AND be owned by the uid each
+      # image runs as — a bind mount is created root-owned, and the container
+      # then cannot write to it.
+      - name: Prepare data directories
+        run: |
+          ssh $DEPLOY_USER@$DEPLOY_HOST <<EOF
+            set -eu
+            cd $DEPLOY_PATH
+
+            # uid:gid per image — verified against the running containers:
+            #   prometheus   65534:65534 (nobody)
+            #   grafana        472:0     (grafana:root)
+            #   loki         10001:10001
+            #   alertmanager 65534:65534 (nobody)
+            #   promtail         0:0     (root)
+            mkdir -p data/prometheus data/grafana data/loki data/alertmanager data/promtail
+            chown -R 65534:65534 data/prometheus data/alertmanager
+            chown -R 472:0       data/grafana
+            chown -R 10001:10001 data/loki
+            chown -R 0:0         data/promtail
+            chmod 750 data
+
+            echo "data directories ready:"
+            ls -ld data/*
+          EOF
+
+      - name: Deploy + Restart Stack
+        run: |
+          ssh $DEPLOY_USER@$DEPLOY_HOST <<EOF
+          cd $DEPLOY_PATH
+          docker compose pull
+          docker compose up -d --remove-orphans
+
+          # Prometheus config: recreate the container when the file changed,
+          # otherwise hot-reload. POST /-/reload alone is NOT enough — the config
+          # is a single-file bind mount and rsync replaces files rather than
+          # editing them in place, so a reload re-reads the stale inode and
+          # returns 200 while nothing changed. Comparing the file the container
+          # sees against the one on disk detects exactly that case; a recreate is
+          # the only thing that re-binds the mount.
+          sleep 5
+          if docker compose exec -T prometheus cat /etc/prometheus/prometheus.yaml 2>/dev/null \
+               | diff -q - config/prometheus.yaml >/dev/null 2>&1; then
+            curl -fsS -X POST http://localhost:9090/-/reload && echo "prometheus config reloaded" \
+              || echo "WARN: prometheus reload failed (config applies on next restart)"
+          else
+            echo "prometheus config changed on disk — recreating so the mount picks it up"
+            docker compose up -d --force-recreate prometheus
+          fi
+          EOF
+
+      - name: Stack report final
+        run: |
+          ssh ${{ env.DEPLOY_USER }}@${{ env.DEPLOY_HOST }} <<EOF
+            cd ${{ env.DEPLOY_PATH }}
+            echo "🔥 Services:"
+            docker compose ps
+            echo "─────────────────────────────────────────────"
+            echo "📜 Lastest Logs:"
+            docker compose logs --tail=50
+            echo "─────────────────────────────────────────────"
+            echo "🟢 Deployed to PRODUCTION!"
+          EOF

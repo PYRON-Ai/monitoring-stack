@@ -1,0 +1,107 @@
+groups:
+  - name: global-alerts
+    rules:
+
+      # ——— SILENCE IN THE AIR ———
+      - alert: InstanceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Silence detected."
+          description: "A target stopped responding. Its presence vanished from the map."
+
+      # ——— HEAT RISING ———
+      - alert: HighCPUUsage
+        expr: 1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) > 0.85
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU running hot."
+          description: "The machine has been sweating above 85% CPU usage."
+
+      # ——— MEMORY STRETCHED THIN ———
+      - alert: HighMemoryUsage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes)
+              / node_memory_MemTotal_bytes > 0.90
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Memory near the edge."
+          description: "Over 90% of memory is in use. The system is getting heavy."
+
+      # ——— GROUND FADING ———
+      - alert: DiskAlmostFull
+        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}
+              / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"} < 0.10
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk nearly full."
+          description: "Less than 10% free space. The floor beneath is turning thin."
+
+      # ——— WEIGHT ABOVE MEASURE ———
+      - alert: HighLoadAverage
+        expr: node_load1 > count(node_cpu_seconds_total{mode="idle"}) * 1.5
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Load too high."
+          description: "The 1-minute load has exceeded what these CPUs can bear."
+
+      # ——— INODES DRYING OUT ———
+      - alert: LowDiskInode
+        expr: node_filesystem_files_free{fstype!~"tmpfs|overlay"} 
+              / node_filesystem_files{fstype!~"tmpfs|overlay"} < 0.10
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Inodes running low."
+          description: "The system is struggling to create new files."
+
+      # ——— TIRED AGENT ———
+      - alert: SlowNodeExporter
+        expr: rate(process_cpu_seconds_total{job="node-exporter"}[5m]) > 0.5
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Node Exporter fatigued."
+          description: "The exporter is burning too much CPU just to stay alive."
+
+      # ——— SCRAPES SLIPPING ———
+      - alert: HighScrapeLatency
+        expr: histogram_quantile(0.95, rate(prometheus_target_interval_length_seconds_bucket[5m])) > 30
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Scrapes are slow."
+          description: "Prometheus is taking too long to collect metrics."
+
+      # ——— CASCADE OF FALLS ———
+      - alert: MultipleInstancesDown
+        expr: sum by(job) (up == 0) > 2
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Multiple failures detected."
+          description: "Several services vanished together. A bigger wave is forming."
+
+      # ——— PROMETHEUS IN TROUBLE ———
+      - alert: PrometheusInternalErrors
+        expr: rate(prometheus_tsdb_head_chunks_created_total[30m]) == 0
+        for: 15m
+        labels:
+          severity: critical
+        annotations:
+          summary: "TSDB frozen."
+          description: "No chunks were created in the last 30 minutes. Ingestion may be stalled."
+

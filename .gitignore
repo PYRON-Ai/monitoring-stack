@@ -2,3 +2,7 @@
 .terraform
 .terraform.lock.hcl
 
+
+# Stack data (bind-mounted databases on the droplet). Never committed, and
+# excluded from the deploy rsync so --delete cannot wipe it.
+data/
