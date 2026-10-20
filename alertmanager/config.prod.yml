@@ -51,11 +51,11 @@ receivers:
   - name: "telegram-critical"
     telegram_configs:
       - bot_token_file: /etc/alertmanager/bot_token
-        # TODO: replace with the real production chat_id (a bare integer, NO
-        # quotes). This placeholder is 1, not 0, on purpose: Alertmanager's
-        # validator rejects chat_id 0 as "missing chat_id on telegram_config",
-        # so a zero placeholder fails amtool check-config. 1 validates
-        # structurally while staying an obvious stand-in.
-        chat_id: 1
+        # chat_id is a BARE INTEGER, never quoted and never substituted:
+        # Alertmanager types it as a Go int64, so a quoted value fails the boot
+        # parse ("cannot unmarshal !!str into int64") and a zero value fails
+        # validation ("missing chat_id"). The id alone grants nothing without the
+        # bot token (which stays out of the repo), so it lives here as a literal.
+        chat_id: 5083297784
         parse_mode: HTML
         send_resolved: true
