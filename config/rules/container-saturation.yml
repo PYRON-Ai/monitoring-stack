@@ -1,0 +1,128 @@
+# cAdvisor saturation alerts — the per-container signals the kube-state-metrics
+# rules in cluster-alerts.yml do not cover: CPU throttling, usage against the
+# configured CPU limit, resource pressure (PSI), and resource-handle leaks
+# (file descriptors / threads).
+#
+# OOMKilled and memory-near-limit are deliberately NOT here: cluster-alerts.yml
+# already covers them (ContainerOOMKilled, ContainerMemoryNearLimit) via
+# kube-state-metrics. These complement that, they do not duplicate it.
+#
+# Fed by the in-cluster prometheus-agent's kubernetes-cadvisor job (remote_write).
+# Routing is the same as the other cluster rules: staging's Alertmanager uses a
+# null receiver, so these are visible in the UI without paging. They carry
+# severity labels so they can route to Telegram unchanged once prod gets a
+# receiver.
+#
+# Thresholds calibrated against the live cluster (2026-10-20): most containers
+# sit at 30-160 FDs and <80 threads, so an absolute leak threshold is wrong —
+# the leak rules below watch RELATIVE growth, which catches a leak in a small
+# container as well as a large one. CPU limits are set on the pyron apps (7
+# containers have a quota), so the CPU rules have real targets.
+groups:
+  - name: container-saturation
+    rules:
+
+      # CPU throttling is the acute, actionable signal: the container is hitting
+      # its CPU limit and the scheduler is holding it back. Invisible on a usage
+      # graph — a container can sit at a "fine" CPU% and still be throttled hard.
+      # Ratio of throttled scheduler periods to total; sustained to avoid firing
+      # on a brief spike.
+      - alert: ContainerCPUThrottlingHigh
+        expr: |
+          sum by (namespace, pod, container) (rate(container_cpu_cfs_throttled_periods_total{container!=""}[5m]))
+            /
+          clamp_min(sum by (namespace, pod, container) (rate(container_cpu_cfs_periods_total{container!=""}[5m])), 1)
+          > 0.25
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container CPU throttled above 25%."
+          description: "{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) has been throttled on more than 25% of CPU scheduler periods for 10 minutes. The CPU limit is too tight for the load — raise the limit or reduce the work."
+
+      # CPU usage against the configured limit — the lead indicator for the
+      # throttling alert above (cause vs effect; both kept on purpose). Only
+      # containers that HAVE a CPU limit are evaluated; the join drops the rest.
+      - alert: ContainerCPUNearLimit
+        expr: |
+          sum by (namespace, pod, container) (rate(container_cpu_usage_seconds_total{container!=""}[5m]))
+            /
+          clamp_min(sum by (namespace, pod, container) (container_spec_cpu_quota{container!=""} / container_spec_cpu_period{container!=""}), 0.001)
+          > 0.90
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container CPU above 90% of its limit."
+          description: "{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) has held above 90% of its CPU limit for 15 minutes. If ContainerCPUThrottlingHigh is also firing for it, the limit is the bottleneck."
+
+      # Memory pressure (PSI): fraction of time tasks were stalled waiting on
+      # memory. Unlike usage, this measures felt contention and leads an OOM.
+      # Verified present per-pod on this cluster (31 series).
+      - alert: ContainerMemoryPressureHigh
+        expr: |
+          sum by (namespace, pod) (rate(container_pressure_memory_waiting_seconds_total[5m])) > 0.30
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container under sustained memory pressure."
+          description: "{{ $labels.namespace }}/{{ $labels.pod }} has spent more than 30% of the last 10 minutes stalled waiting on memory. An OOMKill may follow — check the memory limit and the node's memory."
+
+      # IO pressure (PSI): sustained stall waiting on disk/IO. Catches a pod that
+      # is IO-bound even when CPU and memory look healthy.
+      - alert: ContainerIOPressureHigh
+        expr: |
+          sum by (namespace, pod) (rate(container_pressure_io_waiting_seconds_total[5m])) > 0.30
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container under sustained IO pressure."
+          description: "{{ $labels.namespace }}/{{ $labels.pod }} has spent more than 30% of the last 10 minutes stalled waiting on IO."
+
+      # File-descriptor leak, by RELATIVE growth (not an absolute count — FD
+      # baselines here range from ~30 to ~13000, so a fixed threshold is wrong).
+      # Fires when a container's open-FD count is more than 1.5x what it was an
+      # hour ago AND is still rising. A busy-but-healthy container plateaus; a
+      # leak keeps climbing.
+      - alert: ContainerFileDescriptorLeak
+        expr: |
+          (
+            sum by (namespace, pod, container) (container_file_descriptors{container!=""})
+              /
+            clamp_min(sum by (namespace, pod, container) (container_file_descriptors{container!=""} offset 1h), 1)
+            > 1.5
+          )
+          and
+          (
+            sum by (namespace, pod, container) (container_file_descriptors{container!=""}) > 100
+          )
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Open file descriptors climbing."
+          description: "{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) has more than 1.5x the open file descriptors it had an hour ago and is still above 100. Likely an FD leak heading for the ulimit."
+
+      # Thread leak, same relative-growth logic (thread baselines here are <80,
+      # so an absolute threshold would never fire). More than 1.5x the thread
+      # count of an hour ago, still above a small floor.
+      - alert: ContainerThreadLeak
+        expr: |
+          (
+            sum by (namespace, pod, container) (container_threads{container!=""})
+              /
+            clamp_min(sum by (namespace, pod, container) (container_threads{container!=""} offset 1h), 1)
+            > 1.5
+          )
+          and
+          (
+            sum by (namespace, pod, container) (container_threads{container!=""}) > 50
+          )
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Thread count climbing."
+          description: "{{ $labels.namespace }}/{{ $labels.pod }} ({{ $labels.container }}) has more than 1.5x the threads it had an hour ago and is still above 50. Likely a thread leak."
