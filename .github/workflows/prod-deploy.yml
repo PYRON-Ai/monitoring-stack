@@ -225,6 +225,11 @@ jobs:
         run: |
           ssh $DEPLOY_USER@$DEPLOY_HOST <<EOF
           printf '%s' "${TELEGRAM_BOT_TOKEN}" > ${DEPLOY_PATH}/alertmanager/bot_token
+          # The alertmanager container runs as uid 65534 (nobody) and reads this
+          # file itself (bot_token_file) — so it must be owned by that uid, not
+          # left root-only. A root-owned 600 file gives the container "permission
+          # denied" and every Telegram notify fails silently-but-logged.
+          chown 65534:65534 ${DEPLOY_PATH}/alertmanager/bot_token
           chmod 600 ${DEPLOY_PATH}/alertmanager/bot_token
           EOF
           if [ -z "${TELEGRAM_BOT_TOKEN}" ]; then

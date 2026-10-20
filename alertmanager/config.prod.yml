@@ -56,6 +56,12 @@ receivers:
         # parse ("cannot unmarshal !!str into int64") and a zero value fails
         # validation ("missing chat_id"). The id alone grants nothing without the
         # bot token (which stays out of the repo), so it lives here as a literal.
-        chat_id: 5083297784
+        #
+        # This is a SUPERGROUP ("Pyron-AI Monitoring"), so the id has the -100
+        # prefix Telegram gives supergroups/channels — NOT the bare number and
+        # not a plain negative. A wrong form authenticates fine but fails delivery
+        # with "chat not found (400)". The authoritative value came from
+        # api.telegram.org/bot<TOKEN>/getUpdates (the chat the bot actually sees).
+        chat_id: -1003317516855
         parse_mode: HTML
         send_resolved: true
