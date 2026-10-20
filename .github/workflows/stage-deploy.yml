@@ -205,8 +205,25 @@ jobs:
           # --exclude 'data' is load-bearing: ./data holds the stack's databases as
           # bind mounts, and --delete would wipe them on every deploy because the
           # directory does not exist in the repo.
-          rsync -avzh --delete --exclude '.git' --exclude '.env' --exclude 'data' ./ \
+          #
+          # alertmanager/config.yml and alertmanager/bot_token are DEPLOY ARTIFACTS
+          # generated on the droplet (below), not in the repo — excluding them keeps
+          # --delete from wiping them, same reason as 'data'.
+          rsync -avzh --delete --exclude '.git' --exclude '.env' --exclude 'data' \
+            --exclude 'alertmanager/config.yml' --exclude 'alertmanager/bot_token' ./ \
             $DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH
+
+      # Staging uses the NULL-receiver config — no external paging here, on
+      # purpose (alerts are a prod concern; see config.stage.yml). An empty
+      # bot_token file is created so the compose bind mount has something to
+      # mount; the null receiver never reads it.
+      - name: Select alertmanager config (staging = null receiver)
+        run: |
+          ssh $DEPLOY_USER@$DEPLOY_HOST <<EOF
+          cp ${DEPLOY_PATH}/alertmanager/config.stage.yml ${DEPLOY_PATH}/alertmanager/config.yml
+          touch ${DEPLOY_PATH}/alertmanager/bot_token
+          chmod 600 ${DEPLOY_PATH}/alertmanager/bot_token
+          EOF
 
       # The secret is written to the droplet verbatim, so a malformed one lands
       # silently and the stack starts on defaults. That is not hypothetical: this
