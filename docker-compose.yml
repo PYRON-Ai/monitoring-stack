@@ -53,7 +53,15 @@ services:
     <<: *common-restart
     env_file: .env
     volumes:
+      # config.yml is a DEPLOY ARTIFACT: the pipeline copies config.<env>.yml
+      # onto it on the droplet (stage = null receiver, prod = Telegram). It is
+      # gitignored; the per-environment sources are versioned.
       - ./alertmanager/config.yml:/etc/alertmanager/config.yml:ro
+      # Telegram bot token, written by the prod deploy from a secret (mode 0600,
+      # gitignored). Absent in staging, which never references it (null receiver).
+      # bind-mounting a missing file would error, so the deploy always creates it
+      # (empty in staging) before `up` — see the deploy workflow.
+      - ./alertmanager/bot_token:/etc/alertmanager/bot_token:ro
       - ./data/alertmanager:/alertmanager
     command:
       - '--config.file=/etc/alertmanager/config.yml'

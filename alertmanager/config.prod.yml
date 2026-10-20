@@ -1,0 +1,61 @@
+# PRODUCTION alertmanager config — Telegram paging for critical alerts.
+#
+# This is the prod counterpart of config.stage.yml (null receiver). The deploy
+# copies the per-environment file onto config.yml on the droplet; config.yml
+# itself is a deploy artifact, not source (see .gitignore). Stage never sees
+# this file, prod never sees the null one.
+#
+# CHAT_ID IS AN INTEGER, NOT A STRING. Alertmanager v0.27.0 types
+# TelegramConfig.ChatID as a Go int64 (config/notifiers.go), so `chat_id` must
+# be a bare YAML integer — a quoted value fails the boot parse with
+# "cannot unmarshal !!str into int64" and Alertmanager refuses to start. That is
+# why the chat_id is a literal here and is deliberately NOT fed through envsubst
+# or any other string-producing substitution. It is also why only the bot token
+# (a real secret, and a string) is injected, via bot_token_file below.
+#
+# BOT TOKEN comes from a file the deploy writes from the TELEGRAM_BOT_TOKEN
+# secret (mode 0600, gitignored), never from this file and never from the repo.
+# bot_token_file is mutually exclusive with bot_token — only the file is set.
+
+global:
+  resolve_timeout: 2m
+
+route:
+  # Default receiver. Everything that isn't matched by a route below lands here.
+  # Warnings go here FOR NOW (null) — warning paging is a separate, deliberate
+  # pass we'll tune later. Only critical pages today.
+  receiver: "null"
+  group_by: ["alertname", "namespace"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    # Critical → Telegram. Grouped and throttled so a burst of related criticals
+    # (e.g. several pods of one deployment) arrives as a few messages, not a flood.
+    - matchers:
+        - severity="critical"
+      receiver: "telegram-critical"
+      group_wait: 30s
+      group_interval: 5m
+      repeat_interval: 1h
+    # Warning → null for now. This is the slot where the tuned warning route
+    # will go (its own receiver, quieter throttle). Left explicit so the
+    # intent is visible and the change is a one-liner later.
+    - matchers:
+        - severity="warning"
+      receiver: "null"
+
+receivers:
+  - name: "null"
+
+  - name: "telegram-critical"
+    telegram_configs:
+      - bot_token_file: /etc/alertmanager/bot_token
+        # chat_id is a BARE INTEGER, never quoted and never substituted:
+        # Alertmanager types it as a Go int64, so a quoted value fails the boot
+        # parse ("cannot unmarshal !!str into int64") and a zero value fails
+        # validation ("missing chat_id"). The id alone grants nothing without the
+        # bot token (which stays out of the repo), so it lives here as a literal.
+        chat_id: 5083297784
+        parse_mode: HTML
+        send_resolved: true

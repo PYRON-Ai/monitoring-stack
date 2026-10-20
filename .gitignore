@@ -2,6 +2,13 @@
 .terraform
 .terraform.lock.hcl
 
+# Alertmanager: the active config is a DEPLOY ARTIFACT, not source. The deploy
+# copies the per-environment config.<env>.yml (both versioned) onto config.yml
+# on the droplet — runtime is another story. And the Telegram bot token is a
+# secret written from CI, never committed.
+alertmanager/config.yml
+alertmanager/bot_token
+
 
 # Stack data (bind-mounted databases on the droplet). Never committed, and
 # excluded from the deploy rsync so --delete cannot wipe it.
