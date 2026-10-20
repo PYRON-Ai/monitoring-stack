@@ -48,6 +48,19 @@ route:
 receivers:
   - name: "null"
 
+  # ── Shared Telegram message template ──────────────────────────────────────
+  # One layout for every Telegram receiver, so aprimorar it means editing ONE
+  # place. The &tg_message YAML anchor below is reused (*tg_message) by each
+  # receiver; only the status glyph changes, which the template derives from the
+  # alert's own severity label — so critical and warning share the same block.
+  #
+  # The default message dumps every label (uid, job, the beta_kubernetes_io_*
+  # noise) plus a raw Prometheus /graph URL — unreadable on a phone. This keeps
+  # only what matters in an incident: a status line (color by severity), the
+  # human summary, where it is (ns/pod/container), and the description. Grouped
+  # alerts render one block each. HTML parse_mode, so only <b>/<i>/<code>/<a>
+  # are allowed; our summaries/descriptions are plain text, so no escaping here.
+
   - name: "telegram-critical"
     telegram_configs:
       - bot_token_file: /etc/alertmanager/bot_token
@@ -65,3 +78,23 @@ receivers:
         chat_id: -1003317516855
         parse_mode: HTML
         send_resolved: true
+        message: &tg_message |-
+          {{ if eq .Status "resolved" }}✅ <b>RESOLVED</b>{{ else if eq .CommonLabels.severity "critical" }}🔴 <b>FIRING</b>{{ else }}🟡 <b>FIRING</b>{{ end }} · <b>{{ .CommonLabels.alertname }}</b>
+          {{ range .Alerts }}
+          {{ .Annotations.summary }}
+          📦 <code>{{ .Labels.namespace }}/{{ .Labels.pod }}</code>{{ if .Labels.container }} ({{ .Labels.container }}){{ end }}
+          {{ if .Labels.severity }}⚠️ <i>{{ .Labels.severity }}</i>{{ end }}
+          {{ if .Annotations.description }}📝 {{ .Annotations.description }}{{ end }}
+          {{ end }}
+
+  # Warning receiver — SAME layout (reuses *tg_message), ready for when the tuned
+  # warning route is turned on. Currently nothing routes here (the warning route
+  # still points at "null"); this exists so the template and chat are defined in
+  # one consistent place. The 🟡 glyph is picked automatically by severity.
+  - name: "telegram-warning"
+    telegram_configs:
+      - bot_token_file: /etc/alertmanager/bot_token
+        chat_id: -1003317516855
+        parse_mode: HTML
+        send_resolved: true
+        message: *tg_message
