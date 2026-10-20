@@ -222,6 +222,10 @@ jobs:
           ssh $DEPLOY_USER@$DEPLOY_HOST <<EOF
           cp ${DEPLOY_PATH}/alertmanager/config.stage.yml ${DEPLOY_PATH}/alertmanager/config.yml
           touch ${DEPLOY_PATH}/alertmanager/bot_token
+          # Owned by the alertmanager container's uid (65534/nobody), same as
+          # production — the null receiver never reads it, but keeping both envs
+          # identical avoids a surprise if staging ever gets a real receiver.
+          chown 65534:65534 ${DEPLOY_PATH}/alertmanager/bot_token
           chmod 600 ${DEPLOY_PATH}/alertmanager/bot_token
           EOF
 
