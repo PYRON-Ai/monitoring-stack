@@ -56,6 +56,10 @@ receivers:
         # parse ("cannot unmarshal !!str into int64") and a zero value fails
         # validation ("missing chat_id"). The id alone grants nothing without the
         # bot token (which stays out of the repo), so it lives here as a literal.
-        chat_id: 5083297784
+        #
+        # NOTE THE MINUS SIGN. This is a GROUP chat, and Telegram group ids are
+        # NEGATIVE. A positive id here authenticates fine but fails delivery with
+        # "chat not found (400)" — the bot is looking for a user that isn't there.
+        chat_id: -5083297784
         parse_mode: HTML
         send_resolved: true
