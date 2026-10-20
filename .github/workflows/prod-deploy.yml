@@ -198,8 +198,38 @@ jobs:
           # --exclude 'data' is load-bearing: ./data holds the stack's databases as
           # bind mounts, and --delete would wipe them on every deploy because the
           # directory does not exist in the repo.
-          rsync -avzh --delete --exclude '.git' --exclude '.env' --exclude 'data' ./ \
+          #
+          # alertmanager/config.yml and alertmanager/bot_token are DEPLOY ARTIFACTS
+          # generated on the droplet (below), not in the repo — excluding them keeps
+          # --delete from wiping them on every deploy, same reason as 'data'.
+          rsync -avzh --delete --exclude '.git' --exclude '.env' --exclude 'data' \
+            --exclude 'alertmanager/config.yml' --exclude 'alertmanager/bot_token' ./ \
             $DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH
+
+      # Select the production alertmanager config (Telegram). config.yml is the
+      # fixed path the compose mounts; the per-environment source is versioned.
+      - name: Select alertmanager config (production = Telegram)
+        run: |
+          ssh $DEPLOY_USER@$DEPLOY_HOST <<EOF
+          cp ${DEPLOY_PATH}/alertmanager/config.prod.yml ${DEPLOY_PATH}/alertmanager/config.yml
+          EOF
+
+      # Write the Telegram bot token to the file config.prod.yml points at
+      # (bot_token_file). Only the token is a secret; the chat_id is a literal
+      # int in the versioned config. If the secret is unset we still create the
+      # file (empty) so the bind mount has something to mount and the stack comes
+      # up — Telegram just won't authenticate until the token is set.
+      - name: Push Telegram bot token
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN_PRODUCTION }}
+        run: |
+          ssh $DEPLOY_USER@$DEPLOY_HOST <<EOF
+          printf '%s' "${TELEGRAM_BOT_TOKEN}" > ${DEPLOY_PATH}/alertmanager/bot_token
+          chmod 600 ${DEPLOY_PATH}/alertmanager/bot_token
+          EOF
+          if [ -z "${TELEGRAM_BOT_TOKEN}" ]; then
+            echo "::warning::TELEGRAM_BOT_TOKEN_PRODUCTION is empty — Telegram paging will not authenticate until it is set. Stack still deploys."
+          fi
 
       # The secret is written to the droplet verbatim, so a malformed one lands
       # silently and the stack starts on defaults. A warning, not a failure: an
